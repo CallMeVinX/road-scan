@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { UploadedImageData } from '../../types'
 
 const corners = [
   { x: 20, y: 28 },
@@ -11,7 +12,11 @@ const corners = [
   { x: 79, y: 29 },
 ]
 
-export function StageFeatureDetection() {
+interface StageFeatureDetectionProps {
+  uploadedImage: UploadedImageData | null
+}
+
+export function StageFeatureDetection({ uploadedImage }: StageFeatureDetectionProps) {
   const [activePoints, setActivePoints] = useState(0)
 
   useEffect(() => {
@@ -31,6 +36,12 @@ export function StageFeatureDetection() {
         </p>
 
         <div className="relative mt-5 h-80 overflow-hidden rounded-xl border border-slate-200 bg-[linear-gradient(120deg,#6b737d_0%,#2e343e_50%,#1e2228_100%)]">
+          {uploadedImage && (
+            <>
+              <img src={uploadedImage.url} alt="Road image for feature detection" className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-black/25" />
+            </>
+          )}
           <div
             className="absolute left-[22%] top-[30%] h-28 w-56 rounded-[48%] bg-black/45 blur-[0.5px]"
             style={{ transform: 'rotate(-6deg)' }}

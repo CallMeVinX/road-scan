@@ -11,3 +11,11 @@ export interface StageOption {
   title: string
   description: string
 }
+
+export interface UploadedImageData {
+  fileName: string
+  fileType: string
+  width: number
+  height: number
+  url: string
+}

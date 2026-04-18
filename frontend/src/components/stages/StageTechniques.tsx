@@ -1,6 +1,11 @@
 import { useState } from 'react'
+import type { UploadedImageData } from '../../types'
 
-export function StageTechniques() {
+interface StageTechniquesProps {
+  uploadedImage: UploadedImageData | null
+}
+
+export function StageTechniques({ uploadedImage }: StageTechniquesProps) {
   const [slider, setSlider] = useState(52)
   const [grayscale, setGrayscale] = useState(true)
   const [threshold, setThreshold] = useState(false)
@@ -19,26 +24,43 @@ export function StageTechniques() {
         </p>
 
         <div className="relative mt-5 h-80 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0)_45%),linear-gradient(100deg,#676f79_0%,#353a43_48%,#20242b_100%)]" />
-          <div className="absolute inset-0 opacity-70">
-            <div className="absolute left-[24%] top-[14%] h-52 w-0.75 rotate-18 bg-white/80" />
-            <div className="absolute left-[38%] top-[18%] h-44 w-0.5 -rotate-8 bg-white/80" />
-            <div className="absolute left-[59%] top-[20%] h-50 w-0.5 rotate-9 bg-white/70" />
-          </div>
+          {uploadedImage ? (
+            <img src={uploadedImage.url} alt="Road image before preprocessing" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0)_45%),linear-gradient(100deg,#676f79_0%,#353a43_48%,#20242b_100%)]" />
+              <div className="absolute inset-0 opacity-70">
+                <div className="absolute left-[24%] top-[14%] h-52 w-0.75 rotate-18 bg-white/80" />
+                <div className="absolute left-[38%] top-[18%] h-44 w-0.5 -rotate-8 bg-white/80" />
+                <div className="absolute left-[59%] top-[20%] h-50 w-0.5 rotate-9 bg-white/70" />
+              </div>
+            </>
+          )}
 
           <div
             className="absolute inset-0 overflow-hidden"
             style={{ clipPath: `inset(0 ${100 - slider}% 0 0)` }}
           >
-            <div
-              className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0)_45%),linear-gradient(100deg,#676f79_0%,#353a43_48%,#20242b_100%)]"
-              style={{ filter: afterFilter }}
-            />
-            <div className="absolute inset-0 opacity-70" style={{ filter: afterFilter }}>
-              <div className="absolute left-[24%] top-[14%] h-52 w-0.75 rotate-18 bg-white/95" />
-              <div className="absolute left-[38%] top-[18%] h-44 w-0.5 -rotate-8 bg-white/95" />
-              <div className="absolute left-[59%] top-[20%] h-50 w-0.5 rotate-9 bg-white/95" />
-            </div>
+            {uploadedImage ? (
+              <img
+                src={uploadedImage.url}
+                alt="Road image after preprocessing"
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{ filter: afterFilter }}
+              />
+            ) : (
+              <>
+                <div
+                  className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0)_45%),linear-gradient(100deg,#676f79_0%,#353a43_48%,#20242b_100%)]"
+                  style={{ filter: afterFilter }}
+                />
+                <div className="absolute inset-0 opacity-70" style={{ filter: afterFilter }}>
+                  <div className="absolute left-[24%] top-[14%] h-52 w-0.75 rotate-18 bg-white/95" />
+                  <div className="absolute left-[38%] top-[18%] h-44 w-0.5 -rotate-8 bg-white/95" />
+                  <div className="absolute left-[59%] top-[20%] h-50 w-0.5 rotate-9 bg-white/95" />
+                </div>
+              </>
+            )}
           </div>
 
           <div className="absolute inset-y-0 z-20 w-0.5 bg-blue-600" style={{ left: `${slider}%` }} />

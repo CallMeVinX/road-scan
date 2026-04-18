@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react'
+import type { UploadedImageData } from '../../types'
 
-export function StageClustering() {
+interface StageClusteringProps {
+  uploadedImage: UploadedImageData | null
+}
+
+export function StageClustering({ uploadedImage }: StageClusteringProps) {
   const [clustered, setClustered] = useState(false)
 
   const segments = useMemo(
@@ -23,7 +28,12 @@ export function StageClustering() {
         </p>
 
         <div className="relative mt-5 h-80 overflow-hidden rounded-xl border border-slate-200">
-          <div className="absolute inset-0 bg-[linear-gradient(120deg,#7c848d_0%,#40464f_46%,#272c34_100%)]" />
+          {uploadedImage ? (
+            <img src={uploadedImage.url} alt="Road image for clustering" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <div className="absolute inset-0 bg-[linear-gradient(120deg,#7c848d_0%,#40464f_46%,#272c34_100%)]" />
+          )}
+          {uploadedImage && <div className="absolute inset-0 bg-black/15" />}
           <div className="absolute left-[20%] top-[26%] h-24 w-44 rotate-[-8deg] rounded-[45%] bg-black/45" />
           <div className="absolute left-[65%] top-0 h-full w-3 rotate-[8deg] bg-white/80" />
 

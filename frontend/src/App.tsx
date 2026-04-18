@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Aperture,
   Binary,
@@ -14,10 +14,28 @@ import { StageDataInput } from './components/stages/StageDataInput'
 import { StageFeatureDetection } from './components/stages/StageFeatureDetection'
 import { StageMorphology } from './components/stages/StageMorphology'
 import { StageTechniques } from './components/stages/StageTechniques'
-import type { StageId } from './types'
+import type { StageId, UploadedImageData } from './types'
 
 function App() {
   const [activeStage, setActiveStage] = useState<StageId>('data')
+  const [uploadedImage, setUploadedImage] = useState<UploadedImageData | null>(null)
+
+  const handleImageSelected = useCallback((image: UploadedImageData) => {
+    setUploadedImage((previous) => {
+      if (previous?.url) {
+        URL.revokeObjectURL(previous.url)
+      }
+      return image
+    })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (uploadedImage?.url) {
+        URL.revokeObjectURL(uploadedImage.url)
+      }
+    }
+  }, [uploadedImage])
 
   const stages = useMemo(
     () => [
@@ -78,12 +96,14 @@ function App() {
           </header>
 
           <section className="mt-5">
-            {activeStage === 'data' && <StageDataInput />}
-            {activeStage === 'techniques' && <StageTechniques />}
-            {activeStage === 'convolution' && <StageConvolution />}
-            {activeStage === 'morphology' && <StageMorphology />}
-            {activeStage === 'feature-detection' && <StageFeatureDetection />}
-            {activeStage === 'clustering' && <StageClustering />}
+            {activeStage === 'data' && (
+              <StageDataInput uploadedImage={uploadedImage} onImageSelected={handleImageSelected} />
+            )}
+            {activeStage === 'techniques' && <StageTechniques uploadedImage={uploadedImage} />}
+            {activeStage === 'convolution' && <StageConvolution uploadedImage={uploadedImage} />}
+            {activeStage === 'morphology' && <StageMorphology uploadedImage={uploadedImage} />}
+            {activeStage === 'feature-detection' && <StageFeatureDetection uploadedImage={uploadedImage} />}
+            {activeStage === 'clustering' && <StageClustering uploadedImage={uploadedImage} />}
           </section>
         </main>
       </div>

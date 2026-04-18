@@ -1,8 +1,13 @@
 import { useState } from 'react'
+import type { UploadedImageData } from '../../types'
 
 type MorphMode = 'dilation' | 'erosion'
 
-export function StageMorphology() {
+interface StageMorphologyProps {
+  uploadedImage: UploadedImageData | null
+}
+
+export function StageMorphology({ uploadedImage }: StageMorphologyProps) {
   const [mode, setMode] = useState<MorphMode>('dilation')
 
   const crackScale = mode === 'dilation' ? 1.2 : 0.78
@@ -17,6 +22,12 @@ export function StageMorphology() {
         </p>
 
         <div className="mt-5 relative h-80 overflow-hidden rounded-xl border border-slate-200 bg-[linear-gradient(115deg,#656d77_0%,#2f3540_52%,#1d2128_100%)]">
+          {uploadedImage && (
+            <>
+              <img src={uploadedImage.url} alt="Road image for morphology" className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-black/20" />
+            </>
+          )}
           <div
             className="absolute inset-0 origin-center transition-all duration-500"
             style={{ transform: `scale(${crackScale})`, opacity: crackOpacity }}

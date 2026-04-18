@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { UploadedImageData } from '../../types'
 
 const GRID_COLS = 12
 const GRID_ROWS = 8
@@ -19,7 +20,11 @@ function buildGrid() {
   return cells
 }
 
-export function StageConvolution() {
+interface StageConvolutionProps {
+  uploadedImage: UploadedImageData | null
+}
+
+export function StageConvolution({ uploadedImage }: StageConvolutionProps) {
   const [kernelIndex, setKernelIndex] = useState(0)
   const [tick, setTick] = useState(0)
 
@@ -59,6 +64,12 @@ export function StageConvolution() {
         <p className="mt-1 text-sm text-slate-600">
           Simulasi scan kernel untuk edge detection pada retakan jalan.
         </p>
+
+        {uploadedImage && (
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+            <img src={uploadedImage.url} alt="Road image source for convolution" className="h-36 w-full object-cover" />
+          </div>
+        )}
 
         <div className="mt-5 rounded-xl border border-slate-200 bg-slate-100 p-4">
           <div

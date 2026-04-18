@@ -1,8 +1,59 @@
-import { useState } from 'react'
+import { useRef, useState, type ChangeEvent, type DragEventHandler } from 'react'
 import { FileImage, UploadCloud } from 'lucide-react'
+import type { UploadedImageData } from '../../types'
 
-export function StageDataInput() {
-  const [hasImage, setHasImage] = useState(false)
+interface StageDataInputProps {
+  uploadedImage: UploadedImageData | null
+  onImageSelected: (image: UploadedImageData) => void
+}
+
+export function StageDataInput({ uploadedImage, onImageSelected }: StageDataInputProps) {
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const readImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+
+    image.onload = () => {
+      onImageSelected({
+        fileName: file.name,
+        fileType: file.type,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        url: objectUrl,
+      })
+    }
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+
+    image.src = objectUrl
+  }
+
+  const handleFilePick = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0]
+    if (selectedFile) {
+      readImageFile(selectedFile)
+    }
+
+    event.target.value = ''
+  }
+
+  const handleDrop: DragEventHandler<HTMLButtonElement> = (event) => {
+    event.preventDefault()
+    setIsDragging(false)
+
+    const droppedFile = event.dataTransfer.files?.[0]
+    if (droppedFile) {
+      readImageFile(droppedFile)
+    }
+  }
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
@@ -13,26 +64,38 @@ export function StageDataInput() {
         </p>
 
         <button
-          onClick={() => setHasImage((prev) => !prev)}
-          className="mt-5 flex h-72 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-400 bg-white text-slate-700 transition hover:border-blue-600 hover:bg-blue-50"
+          onClick={() => fileInputRef.current?.click()}
+          onDrop={handleDrop}
+          onDragOver={(event) => event.preventDefault()}
+          onDragEnter={() => setIsDragging(true)}
+          onDragLeave={() => setIsDragging(false)}
+          className={[
+            'mt-5 flex h-72 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-white text-slate-700 transition',
+            isDragging
+              ? 'border-blue-600 bg-blue-50'
+              : 'border-blue-400 hover:border-blue-600 hover:bg-blue-50',
+          ].join(' ')}
         >
-          {!hasImage ? (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFilePick}
+          />
+
+          {!uploadedImage ? (
             <>
               <UploadCloud className="text-blue-600" size={36} />
               <p className="mt-3 text-base font-semibold">Drop gambar jalan rusak di sini</p>
-              <p className="text-sm text-slate-500">Klik untuk simulasi upload gambar</p>
+              <p className="text-sm text-slate-500">Klik atau drag-and-drop untuk upload file asli</p>
             </>
           ) : (
             <div className="relative h-full w-full overflow-hidden rounded-xl">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0)_50%),linear-gradient(115deg,#707781_0%,#434a55_44%,#1f2329_100%)]" />
-              <div className="absolute inset-0 opacity-70">
-                <div className="absolute left-[18%] top-[22%] h-32 rotate-20 bg-white/80 blur-[0.5px]" style={{ width: '4px' }} />
-                <div className="absolute left-[42%] top-[16%] h-40 -rotate-6 bg-white/85" style={{ width: '3px' }} />
-                <div className="absolute left-[58%] top-[33%] h-28 rotate-12 bg-white/70" style={{ width: '2px' }} />
-                <div className="absolute left-[70%] top-[20%] h-44 -rotate-12 bg-white/70" style={{ width: '2px' }} />
-              </div>
+              <img src={uploadedImage.url} alt="Uploaded road damage" className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
               <div className="absolute bottom-3 left-3 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
-                Placeholder: Aspal Retak
+                Input loaded: {uploadedImage.fileName}
               </div>
             </div>
           )}
@@ -45,7 +108,7 @@ export function StageDataInput() {
           <h3 className="font-semibold">Metadata Gambar</h3>
         </div>
 
-        {!hasImage ? (
+        {!uploadedImage ? (
           <p className="mt-4 text-sm text-slate-500">
             Belum ada gambar. Unggah citra untuk menampilkan metadata.
           </p>
@@ -53,19 +116,19 @@ export function StageDataInput() {
           <dl className="mt-4 space-y-3 text-sm">
             <div className="rounded-lg bg-slate-50 px-3 py-2">
               <dt className="text-slate-500">Nama File</dt>
-              <dd className="font-semibold text-slate-900">jalan-retak-simulasi.jpg</dd>
+              <dd className="font-semibold text-slate-900">{uploadedImage.fileName}</dd>
             </div>
             <div className="rounded-lg bg-slate-50 px-3 py-2">
               <dt className="text-slate-500">Resolusi</dt>
-              <dd className="font-semibold text-slate-900">1920 x 1080</dd>
+              <dd className="font-semibold text-slate-900">{uploadedImage.width} x {uploadedImage.height}</dd>
             </div>
             <div className="rounded-lg bg-slate-50 px-3 py-2">
               <dt className="text-slate-500">Format</dt>
-              <dd className="font-semibold text-slate-900">JPEG</dd>
+              <dd className="font-semibold text-slate-900">{uploadedImage.fileType || 'Unknown'}</dd>
             </div>
             <div className="rounded-lg bg-slate-50 px-3 py-2">
-              <dt className="text-slate-500">Kualitas</dt>
-              <dd className="font-semibold text-slate-900">8-bit, RGB</dd>
+              <dt className="text-slate-500">Status</dt>
+              <dd className="font-semibold text-slate-900">Ready for all stages</dd>
             </div>
           </dl>
         )}
