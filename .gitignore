@@ -1,0 +1,33 @@
+# Shared environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor folders
+.vscode/
+.idea/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+backend/.venv/
+
+# Node / Frontend
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/coverage/
+**/.nyc_output/
+**/.eslintcache
+**/.vite/
+**/.turbo/
