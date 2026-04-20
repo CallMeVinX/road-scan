@@ -19,6 +19,7 @@ export function StageDataInput({ uploadedImage, onImageSelected }: StageDataInpu
     const objectUrl = URL.createObjectURL(file)
     const image = new Image()
 
+    // Di dalam readImageFile pada StageDataInput.tsx:
     image.onload = () => {
       onImageSelected({
         fileName: file.name,
@@ -26,8 +27,9 @@ export function StageDataInput({ uploadedImage, onImageSelected }: StageDataInpu
         width: image.naturalWidth,
         height: image.naturalHeight,
         url: objectUrl,
+        file: file, // SIMPAN FILE ASLINYA DI SINI
       })
-    }
+}
 
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl)

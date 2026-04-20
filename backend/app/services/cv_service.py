@@ -45,25 +45,42 @@ def edge_detection_3x3(image: np.ndarray) -> tuple[np.ndarray, list[list[int]], 
     return normalized, kernel.astype(int).tolist(), stats
 
 
+import cv2
+import numpy as np
+
 def morphology_transform(
     image: np.ndarray,
     operation: str,
     iterations: int,
+    kernel_size: int = 3,
 ) -> tuple[np.ndarray, np.ndarray]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, crack_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    
+    # ---------------------------------------------------------
+    # PERBAIKAN: GANTI CANNY DENGAN ADAPTIVE THRESHOLDING
+    # Ini menghasilkan bentuk retakan/tekstur yang LEBIH TEBAL dari 1 pixel
+    # dan kebal terhadap bayangan gelap/langit terang.
+    # ---------------------------------------------------------
+    base_mask = cv2.adaptiveThreshold(
+        gray, 
+        255, 
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+        cv2.THRESH_BINARY_INV, 
+        21, # Ukuran blok area (harus ganjil)
+        10  # Konstanta pengurang (bisa diotak-atik jika terlalu banyak noise)
+    )
 
-    kernel = np.ones((3, 3), dtype=np.uint8)
+    k_size = max(1, kernel_size)
+    kernel = np.ones((k_size, k_size), dtype=np.uint8)
 
     if operation == "dilation":
-        transformed = cv2.dilate(crack_mask, kernel, iterations=iterations)
+        # Akan menebalkan area putih
+        transformed = cv2.dilate(base_mask, kernel, iterations=iterations)
     else:
-        transformed = cv2.erode(crack_mask, kernel, iterations=iterations)
+        # Akan mengikis area putih (sekarang bisa terlihat karena garis awalnya tebal!)
+        transformed = cv2.erode(base_mask, kernel, iterations=iterations)
 
-    overlay = image.copy()
-    overlay[transformed > 0] = (255, 255, 255)
-
-    return transformed, overlay
+    return transformed, transformed
 
 
 def harris_corners(
@@ -74,15 +91,19 @@ def harris_corners(
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray_f32 = np.float32(gray)
 
+    # Deteksi Harris Corner
+    
     response = cv2.cornerHarris(gray_f32, blockSize=2, ksize=3, k=0.04)
     response = cv2.dilate(response, None)
 
     threshold = threshold_ratio * float(response.max())
     ys, xs = np.where(response > threshold)
 
-    corners = []
-    for x, y in zip(xs[:max_points], ys[:max_points]):
-        corners.append(
+    # PERBAIKAN: 
+    # Kumpulkan semua titik beserta nilai "ketajamannya" (response value)
+    all_corners = []
+    for x, y in zip(xs, ys):
+        all_corners.append(
             {
                 "x": int(x),
                 "y": int(y),
@@ -90,11 +111,19 @@ def harris_corners(
             }
         )
 
-    overlay = image.copy()
-    for corner in corners:
-        cv2.circle(overlay, (int(corner["x"]), int(corner["y"])), 3, (0, 0, 255), -1)
+    # Urutkan titik dari nilai ketajaman paling tinggi (menurun)
+    all_corners.sort(key=lambda item: item["response"], reverse=True)
 
-    return overlay, corners, len(xs)
+    # Ambil titik terbaik saja sesuai batas maksimal (misal: 500 terbaik)
+    best_corners = all_corners[:max_points]
+
+    # Gambar titik merah pada gambar asli
+    overlay = image.copy()
+    for corner in best_corners:
+        cv2.circle(overlay, (corner["x"], corner["y"]), 3, (0, 0, 255), -1)
+
+    # Kembalikan gambar, titik terbaik, dan total titik awal
+    return overlay, best_corners, len(all_corners)
 
 
 def kmeans_segmentation(

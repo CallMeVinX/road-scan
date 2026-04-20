@@ -1,84 +1,85 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { UploadedImageData } from '../../types'
-
-const corners = [
-  { x: 20, y: 28 },
-  { x: 33, y: 36 },
-  { x: 41, y: 22 },
-  { x: 52, y: 42 },
-  { x: 58, y: 30 },
-  { x: 65, y: 24 },
-  { x: 72, y: 37 },
-  { x: 79, y: 29 },
-]
 
 interface StageFeatureDetectionProps {
   uploadedImage: UploadedImageData | null
 }
 
 export function StageFeatureDetection({ uploadedImage }: StageFeatureDetectionProps) {
-  const [activePoints, setActivePoints] = useState(0)
+  const [resultImage, setResultImage] = useState<string | null>(null)
+  const [stats, setStats] = useState<{ detected: number; returned: number } | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setActivePoints((prev) => (prev < corners.length ? prev + 1 : corners.length))
-    }, 280)
+  const handleProcess = async () => {
+    if (!uploadedImage || !uploadedImage.file) {
+      alert("Harap unggah gambar terlebih dahulu!")
+      return
+    }
 
-    return () => window.clearInterval(timer)
-  }, [])
+    setIsLoading(true)
+    const formData = new FormData()
+    formData.append('file', uploadedImage.file)
+    formData.append('threshold_ratio', '0.01')
+    formData.append('max_points', '500')
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/v1/features/harris', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!response.ok) throw new Error("Gagal memproses gambar")
+      const data = await response.json()
+      setResultImage(`data:image/png;base64,${data.overlay_base64}`)
+      setStats({ detected: data.detected_total, returned: data.returned_points })
+    } catch (error) {
+      console.error(error)
+      alert("Gagal menghubungi backend.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-lg font-semibold text-slate-900">Harris Corner Detection (Simulasi)</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Titik merah muncul bertahap lalu lock-on pada sudut tajam lubang/retakan.
-        </p>
+        <div className="flex justify-between items-center">
+            <div>
+                <h2 className="text-lg font-semibold text-slate-900">Harris Corner Detection</h2>
+                <p className="mt-1 text-sm text-slate-600">Mendeteksi titik sudut tajam pada lubang/retakan.</p>
+            </div>
+            <button
+                onClick={handleProcess} disabled={isLoading || !uploadedImage}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+            >
+                {isLoading ? 'Memproses...' : 'Cari Corner'}
+            </button>
+        </div>
 
-        <div className="relative mt-5 h-80 overflow-hidden rounded-xl border border-slate-200 bg-[linear-gradient(120deg,#6b737d_0%,#2e343e_50%,#1e2228_100%)]">
-          {uploadedImage && (
-            <>
-              <img src={uploadedImage.url} alt="Road image for feature detection" className="absolute inset-0 h-full w-full object-cover" />
-              <div className="absolute inset-0 bg-black/25" />
-            </>
-          )}
-          <div
-            className="absolute left-[22%] top-[30%] h-28 w-56 rounded-[48%] bg-black/45 blur-[0.5px]"
-            style={{ transform: 'rotate(-6deg)' }}
-          />
-          <div className="absolute left-[30%] top-[34%] h-20 w-42 rotate-[5deg] rounded-[42%] bg-black/65" />
-
-          {corners.map((corner, index) => (
-            <div
-              key={`${corner.x}-${corner.y}`}
-              className={[
-                'absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/80 transition-all duration-500',
-                index < activePoints
-                  ? 'scale-100 bg-red-500 shadow-[0_0_0_6px_rgba(239,68,68,0.18)]'
-                  : 'scale-50 bg-red-200/40 opacity-0',
-              ].join(' ')}
-              style={{ left: `${corner.x}%`, top: `${corner.y}%` }}
-            />
-          ))}
-
-          <div className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700">
-            Corner points detected: {activePoints}/{corners.length}
-          </div>
+        <div className="relative mt-5 h-80 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 flex items-center justify-center">
+            {isLoading ? (
+                <div className="text-slate-500 font-semibold">Mencari titik sudut...</div>
+            ) : resultImage ? (
+                <img src={resultImage} alt="Harris Corners" className="absolute inset-0 h-full w-full object-contain" />
+            ) : uploadedImage ? (
+                <img src={uploadedImage.url} alt="Original" className="absolute inset-0 h-full w-full object-contain opacity-50" />
+            ) : (
+                <div className="text-slate-400">Belum ada gambar</div>
+            )}
         </div>
       </section>
 
       <aside className="rounded-2xl border border-blue-200 bg-blue-50/40 p-5">
-        <h3 className="text-base font-semibold text-slate-900">Status Matching</h3>
+        <h3 className="text-base font-semibold text-slate-900">Hasil Deteksi</h3>
         <div className="mt-4 space-y-3 text-sm text-slate-700">
-          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-            Region of Interest: Lubang Aspal
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+            <span className="block text-xs text-slate-500 mb-1">Total Corner Terdeteksi</span>
+            <span className="font-bold text-lg">{stats ? stats.detected : '-'}</span> titik
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-            Method: Harris Corner Response
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+            <span className="block text-xs text-slate-500 mb-1">Titik yang Ditampilkan</span>
+            <span className="font-bold text-lg text-blue-600">{stats ? stats.returned : '-'}</span> titik
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-            Confidence (simulasi): 0.87
-          </div>
+          <p className="text-xs text-slate-500 mt-2">*Titik merah digambar langsung oleh server OpenCV.</p>
         </div>
       </aside>
     </div>
