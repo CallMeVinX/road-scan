@@ -18,4 +18,5 @@ export interface UploadedImageData {
   width: number
   height: number
   url: string
+  file: File // TAMBAHKAN BARIS INI
 }
