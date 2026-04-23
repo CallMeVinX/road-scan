@@ -256,3 +256,26 @@ def contour_tracking(image: np.ndarray) -> tuple[np.ndarray, int]:
     cv2.drawContours(overlay, filtered_contours, -1, (0, 255, 0), 2)
     
     return overlay, len(filtered_contours)
+
+def apply_binary_threshold(image: np.ndarray) -> np.ndarray:
+    """Mengubah gambar menjadi hitam putih (biner) berdasarkan threshold statis."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Thresholding Otsu seringkali terbaik untuk aspal
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return thresh
+
+def apply_adaptive_threshold(image: np.ndarray) -> np.ndarray:
+    """Mengatasi pencahayaan tidak merata dengan thresholding lokal."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Berguna jika ada bayangan di jalan raya
+    thresh = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+        cv2.THRESH_BINARY, 11, 2
+    )
+    return thresh
+
+def apply_gaussian_blur(image: np.ndarray) -> np.ndarray:
+    """Menghaluskan citra untuk mengurangi noise tekstur aspal yang kasar."""
+    # Kernel 5x5 biasanya cukup untuk smoothing dasar
+    blurred = cv2.GaussianBlur(image, (5, 5), 0)
+    return blurred

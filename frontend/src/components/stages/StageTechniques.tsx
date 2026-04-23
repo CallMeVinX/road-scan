@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { Settings2, Zap } from 'lucide-react'
 import type { UploadedImageData } from '../../types'
 
 interface StageTechniquesProps {
@@ -6,38 +7,30 @@ interface StageTechniquesProps {
 }
 
 export function StageTechniques({ uploadedImage }: StageTechniquesProps) {
-  const [grayscale, setGrayscale] = useState(true)
-  const [threshold, setThreshold] = useState(false)
-  const [thresholdValue, setThresholdValue] = useState(140)
   const [resultImage, setResultImage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [autoProcess, setAutoProcess] = useState(true)
+  const [activeTechnique, setActiveTechnique] = useState('threshold')
 
-  // Auto-process ketika parameter berubah
-  useEffect(() => {
-    if (uploadedImage && autoProcess && !isLoading) {
-      handleProcess()
-    }
-  }, [grayscale, threshold, thresholdValue, uploadedImage])
+  const techniques = [
+    { id: 'threshold', name: 'Binary Thresholding', desc: 'Memisahkan objek dari latar belakang berdasarkan intensitas cahaya.' },
+    { id: 'adaptive', name: 'Adaptive Mean', desc: 'Thresholding lokal untuk mengatasi pencahayaan yang tidak merata.' },
+    { id: 'blur', name: 'Gaussian Blur', desc: 'Menghaluskan citra untuk mengurangi noise pada tekstur aspal.' }
+  ]
 
   const handleProcess = async () => {
-    if (!uploadedImage || !uploadedImage.file) {
-      return
-    }
-
+    if (!uploadedImage?.file) return
     setIsLoading(true)
+    
     const formData = new FormData()
     formData.append('file', uploadedImage.file)
-    formData.append('grayscale', grayscale.toString())
-    formData.append('thresholding', threshold.toString())
-    formData.append('threshold_value', thresholdValue.toString())
+    formData.append('method', activeTechnique)
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/techniques/preprocess', {
+      const response = await fetch('http://127.0.0.1:8000/api/v1/techniques/apply', {
         method: 'POST',
         body: formData,
       })
-      if (!response.ok) throw new Error("Gagal memproses gambar")
+      if (!response.ok) throw new Error("Gagal memproses teknik")
       const data = await response.json()
       setResultImage(`data:image/png;base64,${data.image_base64}`)
     } catch (error) {
@@ -48,111 +41,86 @@ export function StageTechniques({ uploadedImage }: StageTechniquesProps) {
     }
   }
 
-  const handleThresholdChange = (value: number) => {
-    setThresholdValue(value)
-  }
-
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Pre-processing (Live Backend)</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Menerapkan teknik dasar seperti grayscale dan thresholding menggunakan OpenCV.
-            </p>
-          </div>
-          <div className="flex gap-2 items-center">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={autoProcess}
-                onChange={(e) => setAutoProcess(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-blue-600"
-              />
-              <span className="text-slate-700">Auto</span>
-            </label>
-          </div>
-        </div>
-
-        <div className="relative mt-5 h-80 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 flex items-center justify-center">
-          {isLoading ? (
-            <div className="text-center">
-              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-              <p className="text-slate-500 font-semibold">Memproses di Backend...</p>
+    <div className="grid gap-6">
+      {/* Configuration & Controls */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+              <Settings2 size={20} />
             </div>
-          ) : resultImage ? (
-            <img src={resultImage} alt="Processed" className="absolute inset-0 h-full w-full object-contain" />
-          ) : uploadedImage ? (
-            <img src={uploadedImage.url} alt="Original" className="absolute inset-0 h-full w-full object-contain opacity-60" />
-          ) : (
-            <div className="text-slate-400">Belum ada gambar</div>
-          )}
-        </div>
-
-        {threshold && (
-          <div className="mt-5 pt-5 border-t border-slate-200">
-            <label className="text-sm font-semibold text-slate-700 block mb-2">Nilai Threshold: <span className="text-blue-600 font-bold">{thresholdValue}</span></label>
-            <input
-              type="range" 
-              min={0} 
-              max={255} 
-              value={thresholdValue}
-              onChange={(e) => handleThresholdChange(Number(e.target.value))}
-              className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-lg bg-blue-100 accent-blue-600"
-            />
-            <p className="text-xs text-slate-500 mt-2">Geser slider untuk menyesuaikan intensitas threshold (auto-update)</p>
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Digital Image Processing</h2>
+              <p className="text-sm text-slate-500">Pilih teknik pemrosesan untuk meningkatkan visualisasi kerusakan.</p>
+            </div>
           </div>
-        )}
+          <button
+            onClick={handleProcess}
+            disabled={isLoading || !uploadedImage}
+            className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50 shadow-sm w-full sm:w-auto"
+          >
+            <Zap size={16} />
+            {isLoading ? 'Memproses...' : 'Terapkan Teknik'}
+          </button>
+        </div>
+
+        {/* Technique Selector */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+          {techniques.map((tech) => (
+            <button
+              key={tech.id}
+              onClick={() => setActiveTechnique(tech.id)}
+              className={`text-left p-4 rounded-xl border transition-all ${
+                activeTechnique === tech.id
+                  ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <h4 className={`font-bold text-sm ${activeTechnique === tech.id ? 'text-blue-700' : 'text-slate-900'}`}>
+                {tech.name}
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{tech.desc}</p>
+            </button>
+          ))}
+        </div>
+
+        {/* Image Comparison - Light Theme */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Input Panel */}
+          <div className="group relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50">
+            <div className="absolute top-3 left-3 z-10 bg-white/90 text-slate-700 border border-slate-200 text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-md shadow-sm">
+              ORIGINAL IMAGE
+            </div>
+            <div className="relative h-64 lg:h-80 flex items-center justify-center p-2">
+              {uploadedImage ? (
+                <img src={uploadedImage.url} alt="Original" className="h-full w-full object-contain rounded-lg" />
+              ) : (
+                <span className="text-slate-400 text-sm italic">Belum ada citra</span>
+              )}
+            </div>
+          </div>
+
+          {/* Output Panel */}
+          <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50">
+            <div className="absolute top-3 left-3 z-10 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-md shadow-sm uppercase">
+              {activeTechnique} Result
+            </div>
+            <div className="relative h-64 lg:h-80 flex items-center justify-center p-2">
+              {isLoading ? (
+                <div className="flex flex-col items-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mb-3"></div>
+                  <p className="text-blue-600 text-sm font-medium">Memproses filter...</p>
+                </div>
+              ) : resultImage ? (
+                <img src={resultImage} alt="Technique Result" className="h-full w-full object-contain rounded-lg" />
+              ) : (
+                <span className="text-slate-500 text-sm italic">Hasil akan muncul di sini</span>
+              )}
+            </div>
+          </div>
+        </div>
       </section>
-
-      <aside className="rounded-2xl border border-blue-200 bg-blue-50/40 p-5">
-        <h3 className="text-base font-semibold text-slate-900 mb-4">Kontrol Filter</h3>
-        <div className="space-y-3">
-          <button
-            onClick={() => setGrayscale(!grayscale)}
-            disabled={isLoading}
-            className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-sm font-semibold transition ${
-              grayscale 
-                ? 'border-blue-600 bg-blue-600 text-white' 
-                : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200'
-            } disabled:opacity-50`}
-          >
-            <span>Grayscale</span>
-            <span className="text-xs px-2 py-1 rounded bg-black/20">{grayscale ? 'ON' : 'OFF'}</span>
-          </button>
-          <button
-            onClick={() => setThreshold(!threshold)}
-            disabled={isLoading}
-            className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-sm font-semibold transition ${
-              threshold 
-                ? 'border-blue-600 bg-blue-600 text-white' 
-                : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200'
-            } disabled:opacity-50`}
-          >
-            <span>Thresholding</span>
-            <span className="text-xs px-2 py-1 rounded bg-black/20">{threshold ? 'ON' : 'OFF'}</span>
-          </button>
-        </div>
-
-        <div className="mt-5 pt-5 border-t border-slate-200">
-          <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Info</h4>
-          <ul className="space-y-2 text-xs text-slate-600">
-            <li className="flex gap-2">
-              <span className="text-blue-600">▪</span>
-              <span><strong>Grayscale</strong> mengubah gambar ke skala abu-abu untuk menyederhanakan data</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-blue-600">▪</span>
-              <span><strong>Thresholding</strong> mengubah gambar menjadi biner (putih/hitam)</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-blue-600">▪</span>
-              <span>Kedua teknik membantu preprocessing sebelum deteksi fitur</span>
-            </li>
-          </ul>
-        </div>
-      </aside>
     </div>
   )
 }
