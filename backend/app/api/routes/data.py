@@ -1,5 +1,6 @@
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+import mimetypes
 import os
 
 from app.services.cv_service import preprocess_image
@@ -62,7 +63,7 @@ async def get_placeholder_images() -> dict:
                 placeholders.append({
                     "filename": filename,
                     "name": os.path.splitext(filename)[0].replace('_', ' ').title(),
-                    "url": f"/static/placeholders/{filename}"
+                    "url": f"/api/v1/placeholders/{filename}"
                 })
     
     # Sort by name
@@ -74,9 +75,10 @@ async def get_placeholder_images() -> dict:
 @router.get("/placeholders/{filename}")
 async def get_placeholder_image(filename: str):
     """Serve placeholder image file"""
-    file_path = f"app/static/placeholders/{filename}"
+    file_path = os.path.join("app/static/placeholders", filename)
     
     if not os.path.exists(file_path):
-        return {"error": "File not found"}
+        raise HTTPException(status_code=404, detail="File not found")
     
-    return FileResponse(file_path, media_type='image/jpeg')
+    media_type, _ = mimetypes.guess_type(file_path)
+    return FileResponse(file_path, media_type=media_type or 'application/octet-stream')

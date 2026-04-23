@@ -88,7 +88,7 @@ export function StageDataInput({ uploadedImage, onImageSelected }: StageDataInpu
 
   const handlePlaceholderSelect = async (placeholder: PlaceholderImage) => {
     try {
-      const imageUrl = `http://127.0.0.1:8000${placeholder.url}`
+      const imageUrl = `http://127.0.0.1:8000/api/v1/data/placeholders/${placeholder.filename}`
       const response = await fetch(imageUrl)
       
       if (!response.ok) {
@@ -170,7 +170,7 @@ export function StageDataInput({ uploadedImage, onImageSelected }: StageDataInpu
             ) : (
               <div className="relative h-full w-full overflow-hidden rounded-xl">
                 <img src={uploadedImage.url} alt="Uploaded road damage" className="h-full w-full object-contain" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+                <div className="absolute inset-0 bg-linear-to-t from-black/35 via-transparent to-transparent" />
                 <div className="absolute bottom-3 left-3 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
                   Input loaded: {uploadedImage.fileName}
                 </div>
@@ -211,9 +211,9 @@ export function StageDataInput({ uploadedImage, onImageSelected }: StageDataInpu
                       src={`http://127.0.0.1:8000${placeholder.url}`}
                       alt={placeholder.name}
                       className="h-full w-full object-cover transition group-hover:scale-105"
-                      loading="lazy"
+                      loading="eager"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition group-hover:opacity-100" />
+                    <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 transition group-hover:opacity-100" />
                     <div className="absolute bottom-0 left-0 right-0 p-2 text-left">
                       <p className="text-xs font-medium text-white opacity-0 transition group-hover:opacity-100">
                         {placeholder.name}

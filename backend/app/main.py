@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
@@ -13,12 +14,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +25,15 @@ app.add_middleware(
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
+@app.get("/api/v1/placeholders/{filename}")
+async def serve_placeholder_image(filename: str):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(base_dir, "static", "placeholders", filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"Image {filename} not found at {file_path}")
+        
+    return FileResponse(file_path)
 
 app.include_router(api_router, prefix="/api/v1")
 
