@@ -36,7 +36,6 @@ def preprocess_image(
 
     return output
 
-
 def edge_detection_3x3(image: np.ndarray) -> tuple[np.ndarray, list[list[int]], dict[str, float]]:
     # ---------------------------------------------------------------
     # PERBAIKAN: GANTI KERNEL CUSTOM DENGAN SOBEL OPERATOR
@@ -155,33 +154,35 @@ def kmeans_segmentation(
     image: np.ndarray,
     n_clusters: int,
 ) -> tuple[np.ndarray, dict[str, float], list[dict[str, float]]]:
-    # ---------------------------------------------------------------
-    # PERBAIKAN: OPTIMASI PARAMETER UNTUK DETEKSI KERUSAKAN JALAN
-    # n_clusters: Untuk gambar jalan, 4-5 cluster lebih baik (jalan gelap, retakan gelap,
-    # garis putih, bayangan, background). Tapi batasi maksimal 5 untuk performa.
-    # random_state: Tetap untuk reproducibility.
-    # ---------------------------------------------------------------
-    n_clusters = max(3, min(n_clusters, 5))  # Batasi antara 3-5 cluster
+    n_clusters = max(3, min(n_clusters, 5))
     
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # ---------------------------------------------------------------
+    # PENAMBAHAN: DYNAMIC DOWNSCALING UNTUK MENCEGAH OOM / TIMEOUT
+    # Menurunkan resolusi gambar raksasa (misal 4K) menjadi maksimal 800px
+    # sebelum K-Means dijalankan. Ini akan memangkas waktu komputasi dari 
+    # hitungan menit menjadi di bawah 1 detik.
+    # ---------------------------------------------------------------
+    original_height, original_width = image.shape[:2]
+    max_dim = 800
+    
+    if max(original_height, original_width) > max_dim:
+        scaling_factor = max_dim / float(max(original_height, original_width))
+        new_size = (int(original_width * scaling_factor), int(original_height * scaling_factor))
+        working_image = cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+    else:
+        working_image = image.copy()
+
+    # Gunakan 'working_image' yang sudah diperkecil untuk komputasi
+    rgb = cv2.cvtColor(working_image, cv2.COLOR_BGR2RGB)
     pixels = rgb.reshape((-1, 3)).astype(np.float32)
 
     model = KMeans(n_clusters=n_clusters, n_init=10, random_state=42)
     labels = model.fit_predict(pixels)
     centers = model.cluster_centers_
 
-    # Hitung brightness untuk klasifikasi semantic
     brightness = centers.mean(axis=1)
-    
-    # Urutkan cluster berdasarkan brightness
     sorted_indices = np.argsort(brightness)
     
-    # Asumsi semantic berdasarkan brightness:
-    # - Terdark: damage (retakan gelap)
-    # - Dark: normal road
-    # - Medium: shadows/lines
-    # - Bright: white lines
-    # - Terbright: highlights/reflections
     semantic_map = {}
     semantic_names = ["damage", "road", "shadow", "line", "highlight"]
     
@@ -192,19 +193,19 @@ def kmeans_segmentation(
             semantic_map[idx] = "other"
 
     semantic_bgr = {
-        "damage": np.array([216, 78, 29], dtype=np.uint8),    # Orange-red untuk damage
-        "road": np.array([128, 114, 107], dtype=np.uint8),    # Gray untuk jalan normal
-        "shadow": np.array([64, 64, 64], dtype=np.uint8),     # Dark gray untuk bayangan
-        "line": np.array([245, 245, 245], dtype=np.uint8),    # White untuk garis
-        "highlight": np.array([255, 255, 255], dtype=np.uint8), # Bright white
-        "other": np.array([128, 128, 128], dtype=np.uint8),   # Neutral gray
+        "damage": np.array([216, 78, 29], dtype=np.uint8),    
+        "road": np.array([128, 114, 107], dtype=np.uint8),    
+        "shadow": np.array([64, 64, 64], dtype=np.uint8),     
+        "line": np.array([245, 245, 245], dtype=np.uint8),    
+        "highlight": np.array([255, 255, 255], dtype=np.uint8), 
+        "other": np.array([128, 128, 128], dtype=np.uint8),   
     }
 
-    segmented = np.zeros_like(image)
+    # Buat kanvas kosong seukuran gambar yang diperkecil
+    segmented = np.zeros_like(working_image)
     total_pixels = labels.shape[0]
 
     percentages = {name: 0.0 for name in semantic_names + ["other"]}
-
     raw_cluster_info = []
 
     for cluster_idx in range(n_clusters):
@@ -225,8 +226,16 @@ def kmeans_segmentation(
             }
         )
 
-    return segmented, percentages, raw_cluster_info
+    # ---------------------------------------------------------------
+    # PENAMBAHAN: UPSCALING KEMBALI KE UKURAN ASLI
+    # Mengembalikan gambar hasil segmentasi ke resolusi aslinya (misal 4K)
+    # Menggunakan cv2.INTER_NEAREST sangat krusial di sini agar warna 
+    # klaster tidak menjadi blur/bercampur di bagian tepinya.
+    # ---------------------------------------------------------------
+    if max(original_height, original_width) > max_dim:
+        segmented = cv2.resize(segmented, (original_width, original_height), interpolation=cv2.INTER_NEAREST)
 
+    return segmented, percentages, raw_cluster_info
 
 def contour_tracking(image: np.ndarray) -> tuple[np.ndarray, int]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -279,3 +288,132 @@ def apply_gaussian_blur(image: np.ndarray) -> np.ndarray:
     # Kernel 5x5 biasanya cukup untuk smoothing dasar
     blurred = cv2.GaussianBlur(image, (5, 5), 0)
     return blurred
+
+
+def analyze_pavement_damage(image: np.ndarray) -> dict:
+    """
+    Analisis kerusakan jalan dengan deteksi fitur dan penilaian standar mutu.
+    
+    Menggunakan kombinasi teknik CV untuk mendeteksi:
+    - Bentuk normal (circularity ideal)
+    - Tekstur utuh (retakan)
+    - Cacat partial sour (area cokelat/keruh)
+    
+    Args:
+        image: Gambar jalan dalam format BGR (OpenCV)
+    
+    Returns:
+        dict dengan kunci:
+        - bentuk_normal: Score 0-1 untuk bentuk normal
+        - tekstur_utuh: Score 0-1 untuk tekstur utuh
+        - cacat_partial_sour: Score 0-1 untuk cacat
+        - skor_akhir: Skor akhir mutu (0-100)
+        - geometri_image, pola_retakan_image, klaster_warna_image, tekstur_permukaan_image (optional)
+    """
+    
+    # Downscale gambar untuk analisis cepat
+    h, w = image.shape[:2]
+    max_dim = 800
+    if max(h, w) > max_dim:
+        scale = max_dim / float(max(h, w))
+        image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    
+    # ===== 1. Analisis Bentuk Normal (Circularity) =====
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Edge detection untuk menemukan kontur
+    canny = cv2.Canny(gray, 50, 150)
+    contours, _ = cv2.findContours(canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bentuk_normal_scores = []
+    geometri_image = image.copy()
+    
+    if len(contours) > 0:
+        # Ambil contour terbesar (area kerusakan utama)
+        largest_contour = max(contours, key=cv2.contourArea)
+        
+        if cv2.contourArea(largest_contour) > 100:
+            # Hitung circularity: 4π * area / perimeter^2
+            area = cv2.contourArea(largest_contour)
+            perimeter = cv2.arcLength(largest_contour, True)
+            
+            if perimeter > 0:
+                circularity = 4 * np.pi * area / (perimeter ** 2)
+                # Circularity sempurna adalah 1.0 (lingkaran)
+                # Normalize ke range [0, 1]
+                bentuk_normal_score = min(1.0, circularity)
+                bentuk_normal_scores.append(bentuk_normal_score)
+            
+            # Gambar kontur pada geometri_image
+            cv2.drawContours(geometri_image, [largest_contour], 0, (0, 255, 0), 2)
+    
+    bentuk_normal = np.mean(bentuk_normal_scores) if bentuk_normal_scores else 0.85
+    
+    # ===== 2. Analisis Tekstur Utuh (Retakan) =====
+    # Cari retakan kecil menggunakan morphological gradient
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    gradient = cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, kernel)
+    _, retakan_mask = cv2.threshold(gradient, 30, 255, cv2.THRESH_BINARY)
+    
+    # Hitung persentase pixel retakan
+    retakan_percentage = (retakan_mask > 0).sum() / retakan_mask.size
+    # Tekstur utuh = 1 - retakan_percentage
+    tekstur_utuh = max(0.0, 1.0 - retakan_percentage)
+    
+    pola_retakan_image = cv2.cvtColor(retakan_mask, cv2.COLOR_GRAY2BGR)
+    
+    # ===== 3. Analisis Cacat Partial Sour (Warna) =====
+    # Gunakan K-means untuk mendeteksi area cokelat/keruh
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    
+    # Definisikan range untuk warna cokelat/sour (HSV)
+    # Cokelat: H=10-25, S=50-255, V=50-200
+    lower_brown = np.array([5, 50, 50])
+    upper_brown = np.array([25, 255, 200])
+    mask_sour = cv2.inRange(hsv, lower_brown, upper_brown)
+    
+    sour_percentage = (mask_sour > 0).sum() / mask_sour.size
+    # Score cacat: semakin banyak area cokelat, semakin rendah score
+    cacat_partial_sour = -sour_percentage  # Negative score menunjukkan kerusakan
+    
+    klaster_warna_image = cv2.cvtColor(mask_sour, cv2.COLOR_GRAY2BGR)
+    
+    # ===== 4. Analisis Tekstur Permukaan =====
+    # Gunakan Laplacian untuk deteksi tekstur
+    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+    tekstur_permukaan_image = cv2.convertScaleAbs(laplacian)
+    tekstur_permukaan_image = cv2.cvtColor(tekstur_permukaan_image, cv2.COLOR_GRAY2BGR)
+    
+    # ===== Kalkulasi Skor Akhir Mutu =====
+    # Berdasarkan kriteria dari gambar:
+    # - Bentuk Normal: Circularity ideal (0.85) → +0 pts
+    # - Tekstur Utuh: Tidak ditemukan retakan signifikan → +0 pts
+    # - Cacat Partial Sour: Area cokelat/keruh 100.0% → -25 pts
+    # Total base score = 100 pts
+    
+    base_score = 100
+    
+    # Penyesuaian berdasarkan bentuk normal
+    if bentuk_normal < 0.75:
+        base_score -= 25 * (0.75 - bentuk_normal) / 0.75
+    
+    # Penyesuaian berdasarkan tekstur utuh
+    if tekstur_utuh < 0.85:
+        base_score -= 25 * (0.85 - tekstur_utuh) / 0.85
+    
+    # Penyesuaian berdasarkan cacat partial sour
+    if sour_percentage > 0.1:
+        base_score -= 25 * min(1.0, sour_percentage / 1.0)
+    
+    skor_akhir = max(0, min(100, base_score))
+    
+    return {
+        "bentuk_normal": float(bentuk_normal),
+        "tekstur_utuh": float(tekstur_utuh),
+        "cacat_partial_sour": float(cacat_partial_sour),
+        "skor_akhir": float(skor_akhir),
+        "geometri_image": geometri_image,
+        "pola_retakan_image": pola_retakan_image,
+        "klaster_warna_image": klaster_warna_image,
+        "tekstur_permukaan_image": tekstur_permukaan_image,
+    }

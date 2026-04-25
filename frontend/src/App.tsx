@@ -6,6 +6,7 @@ import {
   Layers,
   ScanSearch,
   Sparkles,
+  BarChart3,
 } from 'lucide-react'
 import { Sidebar } from './components/Sidebar'
 import { StageClustering } from './components/stages/StageClustering'
@@ -14,6 +15,7 @@ import { StageDataInput } from './components/stages/StageDataInput'
 import { StageFeatureDetection } from './components/stages/StageFeatureDetection'
 import { StageMorphology } from './components/stages/StageMorphology'
 import { StageTechniques } from './components/stages/StageTechniques'
+import { StagePavementDamageAnalysis } from './components/stages/StagePavementDamageAnalysis'
 import type { StageId, UploadedImageData } from './types'
 
 function App() {
@@ -75,6 +77,12 @@ function App() {
         description: 'K-means clustering area kerusakan jalan.',
         icon: Aperture,
       },
+      {
+        id: 'analysis' as const,
+        title: 'Analisis Fitur & Standar Mutu',
+        description: 'Hasil deteksi kerusakan jalan dengan penilaian dan skor mutu.',
+        icon: BarChart3,
+      },
     ],
     [],
   )
@@ -104,6 +112,7 @@ function App() {
             {activeStage === 'morphology' && <StageMorphology uploadedImage={uploadedImage} />}
             {activeStage === 'feature-detection' && <StageFeatureDetection uploadedImage={uploadedImage} />}
             {activeStage === 'clustering' && <StageClustering uploadedImage={uploadedImage} />}
+            {activeStage === 'analysis' && <StagePavementDamageAnalysis uploadedImage={uploadedImage} />}
           </section>
         </main>
       </div>

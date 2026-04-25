@@ -5,6 +5,7 @@ export type StageId =
   | 'morphology'
   | 'feature-detection'
   | 'clustering'
+  | 'analysis'
 
 export interface StageOption {
   id: StageId
