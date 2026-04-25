@@ -376,6 +376,434 @@ def analyze_pavement_damage(image: np.ndarray) -> dict:
     # Score cacat: semakin banyak area cokelat, semakin rendah score
     cacat_partial_sour = -sour_percentage  # Negative score menunjukkan kerusakan
     
+    
+# ============================================================================
+# FITUR BARU 1: QUANTIZATION (Kuantisasi - Pengurangan Kedalaman Warna)
+# ============================================================================
+
+def quantize_image(image: np.ndarray, bits_per_channel: int) -> tuple[np.ndarray, dict]:
+    """
+    Kuantisasi citra: Mengurangi kedalaman bit per channel warna.
+    
+    Contoh:
+    - bits_per_channel=8: 24-bit RGB (8+8+8, standar)
+    - bits_per_channel=4: 12-bit RGB (4+4+4)
+    - bits_per_channel=2: 6-bit RGB (2+2+2, 64 warna)
+    - bits_per_channel=1: 3-bit RGB (1+1+1, 8 warna)
+    
+    Args:
+        image: BGR image from OpenCV
+        bits_per_channel: Jumlah bit per channel (1-8)
+    
+    Returns:
+        tuple: (quantized_image, stats_dict)
+    """
+    bits = max(1, min(bits_per_channel, 8))
+    
+    # Hitung jumlah level warna
+    levels = 2 ** bits
+    
+    # Quantize: bagi dengan step, bulatkan, kalikan kembali
+    step = 256 // levels if levels > 0 else 256
+    quantized = (image.astype(np.float32) / step).astype(np.uint8)
+    quantized = (quantized * step).astype(np.uint8)
+    
+    # Hitung statistik
+    original_colors = len(np.unique(image.reshape(-1, 3), axis=0))
+    quantized_colors = len(np.unique(quantized.reshape(-1, 3), axis=0))
+    compression_ratio = (24 / bits) if bits > 0 else 1.0
+    
+    stats = {
+        "original_bits_per_channel": 8,
+        "quantized_bits_per_channel": bits,
+        "original_possible_colors": 256 ** 3,  # 16,777,216
+        "quantized_possible_colors": levels ** 3,
+        "original_unique_colors": int(original_colors),
+        "quantized_unique_colors": int(quantized_colors),
+        "compression_ratio": float(compression_ratio),
+        "color_reduction_percent": float((1 - quantized_colors / max(original_colors, 1)) * 100),
+    }
+    
+    return quantized, stats
+
+
+def get_quantization_levels(image: np.ndarray) -> dict:
+    """
+    Analisis kedalaman bit dan histogran warna dari citra.
+    
+    Returns:
+        dict berisi histogram dan informasi kedalaman warna
+    """
+    # Hitung histogram per channel
+    hist_b = cv2.calcHist([image], [0], None, [256], [0, 256])
+    hist_g = cv2.calcHist([image], [1], None, [256], [0, 256])
+    hist_r = cv2.calcHist([image], [2], None, [256], [0, 256])
+    
+    # Normalize
+    hist_b = (hist_b / hist_b.sum()).flatten().tolist()
+    hist_g = (hist_g / hist_g.sum()).flatten().tolist()
+    hist_r = (hist_r / hist_r.sum()).flatten().tolist()
+    
+    # Hitung jumlah warna unik
+    height, width = image.shape[:2]
+    total_pixels = height * width
+    unique_colors = len(np.unique(image.reshape(-1, 3), axis=0))
+    
+    return {
+        "width": width,
+        "height": height,
+        "total_pixels": total_pixels,
+        "unique_colors": unique_colors,
+        "color_diversity_percent": float((unique_colors / (256**3)) * 100),
+        "histogram_blue": hist_b,
+        "histogram_green": hist_g,
+        "histogram_red": hist_r,
+    }
+
+
+# ============================================================================
+# FITUR BARU 2: NOISE SIMULATION & REMOVAL (Simulasi & Penghilangan Noise)
+# ============================================================================
+
+def add_salt_pepper_noise(image: np.ndarray, probability: float = 0.01) -> tuple[np.ndarray, dict]:
+    """
+    Tambahkan Salt & Pepper Noise ke citra.
+    
+    Salt & Pepper Noise: Random piksel berubah menjadi putih (255) atau hitam (0)
+    Sangat umum pada gambar yang dikompres atau yang tidak sempurna.
+    
+    Args:
+        image: BGR image
+        probability: Probabilitas piksel terkena noise (0.0 - 1.0, default 0.01 = 1%)
+    
+    Returns:
+        tuple: (noisy_image, stats_dict)
+    """
+    prob = max(0.0, min(probability, 0.5))
+    output = image.copy().astype(np.float32)
+    
+    h, w = image.shape[:2]
+    num_pixels = h * w
+    num_salt = int(num_pixels * prob / 2)
+    num_pepper = int(num_pixels * prob / 2)
+    
+    # Add salt (white pixels)
+    for _ in range(num_salt):
+        y = np.random.randint(0, h)
+        x = np.random.randint(0, w)
+        output[y, x] = [255, 255, 255]
+    
+    # Add pepper (black pixels)
+    for _ in range(num_pepper):
+        y = np.random.randint(0, h)
+        x = np.random.randint(0, w)
+        output[y, x] = [0, 0, 0]
+    
+    output = np.clip(output, 0, 255).astype(np.uint8)
+    
+    stats = {
+        "noise_type": "salt_pepper",
+        "noise_probability": prob,
+        "pixels_affected": num_salt + num_pepper,
+        "total_pixels": num_pixels,
+        "noise_percentage": float((num_salt + num_pepper) / num_pixels * 100),
+    }
+    
+    return output, stats
+
+
+def add_gaussian_noise(image: np.ndarray, std_dev: float = 25.0) -> tuple[np.ndarray, dict]:
+    """
+    Tambahkan Gaussian Noise ke citra.
+    
+    Gaussian Noise: Random nilai noise mengikuti distribusi normal
+    Umum terjadi pada foto dengan ISO tinggi atau sensor dengan gain tinggi.
+    
+    Args:
+        image: BGR image
+        std_dev: Standard deviation dari noise (0-100, default 25)
+    
+    Returns:
+        tuple: (noisy_image, stats_dict)
+    """
+    std = max(0.0, min(std_dev, 100.0))
+    
+    # Generate Gaussian noise
+    noise = np.random.normal(0, std, image.shape).astype(np.float32)
+    
+    # Add noise ke image
+    noisy = image.astype(np.float32) + noise
+    noisy = np.clip(noisy, 0, 255).astype(np.uint8)
+    
+    # Hitung SNR (Signal-to-Noise Ratio) sederhana
+    signal_power = np.mean(image.astype(np.float32) ** 2)
+    noise_power = std ** 2
+    snr = 10 * np.log10(signal_power / (noise_power + 1e-8))
+    
+    stats = {
+        "noise_type": "gaussian",
+        "std_deviation": float(std),
+        "noise_power": float(noise_power),
+        "signal_to_noise_ratio_db": float(snr),
+    }
+    
+    return noisy, stats
+
+
+def remove_noise_bilateral(image: np.ndarray, diameter: int = 9, sigma_color: float = 75.0, sigma_space: float = 75.0) -> tuple[np.ndarray, dict]:
+    """
+    Hilangkan noise menggunakan Bilateral Filter.
+    
+    Bilateral Filter: Sangat efektif menghilangkan noise sambil mempertahankan edges.
+    Cocok untuk pavement damage karena edge retakan tetap tajam.
+    
+    Args:
+        image: BGR image
+        diameter: Diameter neighborhood pixel (default 9)
+        sigma_color: Sigma untuk domain warna (default 75)
+        sigma_space: Sigma untuk domain spasial (default 75)
+    
+    Returns:
+        tuple: (denoised_image, stats_dict)
+    """
+    d = max(3, min(diameter, 25))
+    if d % 2 == 0:
+        d += 1  # Pastikan ganjil
+    
+    denoised = cv2.bilateralFilter(image, d, sigma_color, sigma_space)
+    
+    # Hitung perbedaan (perkiraan noise yang dihilangkan)
+    diff = cv2.absdiff(image.astype(np.float32), denoised.astype(np.float32))
+    noise_reduced = np.mean(diff)
+    
+    stats = {
+        "filter_type": "bilateral",
+        "diameter": d,
+        "sigma_color": float(sigma_color),
+        "sigma_space": float(sigma_space),
+        "avg_noise_reduction": float(noise_reduced),
+    }
+    
+    return denoised, stats
+
+
+def remove_noise_morphology(image: np.ndarray, kernel_size: int = 5) -> tuple[np.ndarray, dict]:
+    """
+    Hilangkan noise menggunakan Morphological Operations (opening).
+    
+    Morphological Opening: Erosion followed by dilation
+    Efektif menghilangkan small noise sambil mempertahankan struktur utama.
+    
+    Args:
+        image: BGR image
+        kernel_size: Ukuran kernel (ganjil, default 5)
+    
+    Returns:
+        tuple: (denoised_image, stats_dict)
+    """
+    k = max(3, min(kernel_size, 21))
+    if k % 2 == 0:
+        k += 1  # Pastikan ganjil
+    
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    
+    # Apply morphological opening
+    denoised = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel, iterations=1)
+    
+    stats = {
+        "filter_type": "morphological_opening",
+        "kernel_size": k,
+        "kernel_type": "ellipse",
+    }
+    
+    return denoised, stats
+
+
+# ============================================================================
+# FITUR BARU 3: FEATURE MATCHING (Pencocokan Fitur Antar Gambar)
+# ============================================================================
+
+def feature_matching_sift(image1: np.ndarray, image2: np.ndarray, max_matches: int = 20) -> dict:
+    """
+    Deteksi dan cocokkan fitur SIFT antara dua gambar.
+    
+    SIFT (Scale-Invariant Feature Transform):
+    - Invariant terhadap scale, rotation, dan perspective change
+    - Cocok untuk matching pavement damage across berbagai sudut
+    
+    Args:
+        image1: Query image (BGR)
+        image2: Reference image (BGR)
+        max_matches: Maximum number of matches to return (default 20)
+    
+    Returns:
+        dict dengan matched points dan visualization
+    """
+    try:
+        # Inisialisasi SIFT detector
+        sift = cv2.SIFT_create()
+        
+        # Detect keypoints dan descriptors
+        kp1, des1 = sift.detectAndCompute(image1, None)
+        kp2, des2 = sift.detectAndCompute(image2, None)
+        
+        if des1 is None or des2 is None or len(kp1) == 0 or len(kp2) == 0:
+            return {
+                "matched_points": 0,
+                "keypoints_image1": 0,
+                "keypoints_image2": 0,
+                "error": "Tidak ada fitur yang terdeteksi di salah satu gambar",
+                "visualization_base64": None,
+            }
+        
+        # Gunakan BFMatcher (Brute Force Matcher)
+        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+        matches = bf.knnMatch(des1, des2, k=2)
+        
+        # Lowe's ratio test untuk filter good matches
+        good_matches = []
+        for match_pair in matches:
+            if len(match_pair) == 2:
+                m, n = match_pair
+                if m.distance < 0.7 * n.distance:  # Threshold 0.7
+                    good_matches.append(m)
+        
+        # Batasi jumlah matches
+        good_matches = good_matches[:max_matches]
+        
+        # Draw matches
+        h1, w1 = image1.shape[:2]
+        h2, w2 = image2.shape[:2]
+        
+        # Create canvas untuk visualization
+        canvas = np.zeros((max(h1, h2), w1 + w2, 3), dtype=np.uint8)
+        canvas[0:h1, 0:w1] = image1
+        canvas[0:h2, w1:w1+w2] = image2
+        
+        # Draw keypoints dan matching lines
+        for match in good_matches:
+            pt1 = tuple(map(int, kp1[match.queryIdx].pt))
+            pt2 = tuple(map(int, kp2[match.trainIdx].pt))
+            pt2_offset = (pt2[0] + w1, pt2[1])
+            
+            # Random color untuk setiap match
+            color = tuple(map(int, np.random.rand(3) * 255))
+            
+            cv2.circle(canvas, pt1, 5, color, -1)
+            cv2.circle(canvas, pt2_offset, 5, color, -1)
+            cv2.line(canvas, pt1, pt2_offset, color, 1)
+        
+        # Convert ke base64
+        from app.utils.image_io import encode_image_base64
+        viz_base64 = encode_image_base64(canvas)
+        
+        match_details = []
+        for match in good_matches:
+            match_details.append({
+                "distance": float(match.distance),
+                "point1": {"x": int(kp1[match.queryIdx].pt[0]), "y": int(kp1[match.queryIdx].pt[1])},
+                "point2": {"x": int(kp2[match.trainIdx].pt[0]), "y": int(kp2[match.trainIdx].pt[1])},
+            })
+        
+        return {
+            "matched_points": len(good_matches),
+            "keypoints_image1": len(kp1),
+            "keypoints_image2": len(kp2),
+            "match_details": match_details,
+            "visualization_base64": viz_base64,
+        }
+    
+    except Exception as e:
+        return {
+            "matched_points": 0,
+            "error": str(e),
+            "visualization_base64": None,
+        }
+
+
+def feature_matching_template(template: np.ndarray, image: np.ndarray) -> dict:
+    """
+    Template Matching: Cari posisi template dalam gambar yang lebih besar.
+    
+    Cocok untuk:
+    - Mendeteksi pola retakan yang sama di berbagai lokasi
+    - Matching kerusakan pavement yang terlihat identik
+    
+    Args:
+        template: Template citra (BGR, ukuran lebih kecil)
+        image: Citra target untuk dicari (BGR, ukuran lebih besar)
+    
+    Returns:
+        dict dengan match locations dan scores
+    """
+    try:
+        # Pastikan template lebih kecil dari image
+        if template.shape[0] >= image.shape[0] or template.shape[1] >= image.shape[1]:
+            return {
+                "matched_locations": [],
+                "error": "Template harus lebih kecil dari image",
+            }
+        
+        # Multi-scale template matching
+        gray_template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        matches = []
+        
+        # Coba berbagai scale (0.5x, 0.75x, 1.0x, 1.25x, 1.5x)
+        for scale in [0.5, 0.75, 1.0, 1.25, 1.5]:
+            scaled_template = cv2.resize(gray_template, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+            
+            if scaled_template.shape[0] >= gray_image.shape[0] or scaled_template.shape[1] >= gray_image.shape[1]:
+                continue
+            
+            # Template matching dengan correlation coefficient
+            result = cv2.matchTemplate(gray_image, scaled_template, cv2.TM_CCOEFF_NORMED)
+            
+            # Cari local maxima (threshold > 0.7)
+            loc = np.where(result >= 0.7)
+            
+            for pt in zip(*loc[::-1]):
+                matches.append({
+                    "x": int(pt[0]),
+                    "y": int(pt[1]),
+                    "scale": float(scale),
+                    "confidence": float(result[pt[1], pt[0]]),
+                    "width": int(scaled_template.shape[1]),
+                    "height": int(scaled_template.shape[0]),
+                })
+        
+        # Sort by confidence
+        matches.sort(key=lambda x: x["confidence"], reverse=True)
+        
+        # Draw matches pada image
+        overlay = image.copy()
+        for i, match in enumerate(matches[:10]):  # Tampilkan top 10
+            x, y = match["x"], match["y"]
+            w, h = match["width"], match["height"]
+            color = (0, 255 - i*20, i*20)  # Color gradient
+            cv2.rectangle(overlay, (x, y), (x+w, y+h), color, 2)
+            cv2.putText(overlay, f"{match['confidence']:.2f}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        
+        from app.utils.image_io import encode_image_base64
+        viz_base64 = encode_image_base64(overlay)
+        
+        return {
+            "matched_locations": matches[:20],  # Top 20 matches
+            "total_matches": len(matches),
+            "template_width": template.shape[1],
+            "template_height": template.shape[0],
+            "image_width": image.shape[1],
+            "image_height": image.shape[0],
+            "visualization_base64": viz_base64,
+        }
+    
+    except Exception as e:
+        return {
+            "matched_locations": [],
+            "error": str(e),
+        }
+    
     klaster_warna_image = cv2.cvtColor(mask_sour, cv2.COLOR_GRAY2BGR)
     
     # ===== 4. Analisis Tekstur Permukaan =====

@@ -7,6 +7,9 @@ import {
   ScanSearch,
   Sparkles,
   BarChart3,
+  Zap,
+  Wind,
+  Link2,
 } from 'lucide-react'
 import { Sidebar } from './components/Sidebar'
 import { StageClustering } from './components/stages/StageClustering'
@@ -16,6 +19,9 @@ import { StageFeatureDetection } from './components/stages/StageFeatureDetection
 import { StageMorphology } from './components/stages/StageMorphology'
 import { StageTechniques } from './components/stages/StageTechniques'
 import { StagePavementDamageAnalysis } from './components/stages/StagePavementDamageAnalysis'
+import { StageQuantization } from './components/stages/StageQuantization'
+import { StageNoise } from './components/stages/StageNoise'
+import { StageFeatureMatching } from './components/stages/StageFeatureMatching'
 import type { StageId, UploadedImageData } from './types'
 
 function App() {
@@ -78,6 +84,24 @@ function App() {
         icon: Aperture,
       },
       {
+        id: 'quantization' as const,
+        title: 'Quantization',
+        description: 'Kuantisasi warna: Pengurangan kedalaman bit per channel.',
+        icon: Zap,
+      },
+      {
+        id: 'noise' as const,
+        title: 'Noise Processing',
+        description: 'Simulasi dan penghilangan Salt & Pepper, Gaussian noise.',
+        icon: Wind,
+      },
+      {
+        id: 'feature-matching' as const,
+        title: 'Feature Matching',
+        description: 'Pencocokan fitur antar gambar menggunakan SIFT atau Template Matching.',
+        icon: Link2,
+      },
+      {
         id: 'analysis' as const,
         title: 'Analisis Fitur & Standar Mutu',
         description: 'Hasil deteksi kerusakan jalan dengan penilaian dan skor mutu.',
@@ -112,6 +136,9 @@ function App() {
             {activeStage === 'morphology' && <StageMorphology uploadedImage={uploadedImage} />}
             {activeStage === 'feature-detection' && <StageFeatureDetection uploadedImage={uploadedImage} />}
             {activeStage === 'clustering' && <StageClustering uploadedImage={uploadedImage} />}
+            {activeStage === 'quantization' && <StageQuantization uploadedImage={uploadedImage} />}
+            {activeStage === 'noise' && <StageNoise uploadedImage={uploadedImage} />}
+            {activeStage === 'feature-matching' && <StageFeatureMatching uploadedImage={uploadedImage} />}
             {activeStage === 'analysis' && <StagePavementDamageAnalysis uploadedImage={uploadedImage} />}
           </section>
         </main>

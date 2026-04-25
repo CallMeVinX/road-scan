@@ -16,7 +16,7 @@ export function Sidebar({ activeStage, onSelectStage, stages }: SidebarProps) {
         </p>
         <h1 className="mt-2 text-2xl font-bold text-slate-900">Deteksi Kerusakan Jalan</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Prototipe interaktif 6 tahap pemrosesan citra untuk analisis kerusakan aspal.
+          Prototipe interaktif 9 tahap pemrosesan citra untuk analisis kerusakan aspal (termasuk Quantization, Noise, Feature Matching).
         </p>
       </div>
 

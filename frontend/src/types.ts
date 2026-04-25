@@ -5,6 +5,9 @@ export type StageId =
   | 'morphology'
   | 'feature-detection'
   | 'clustering'
+  | 'quantization'
+  | 'noise'
+  | 'feature-matching'
   | 'analysis'
 
 export interface StageOption {
