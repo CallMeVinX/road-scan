@@ -376,7 +376,49 @@ def analyze_pavement_damage(image: np.ndarray) -> dict:
     # Score cacat: semakin banyak area cokelat, semakin rendah score
     cacat_partial_sour = -sour_percentage  # Negative score menunjukkan kerusakan
     
+    klaster_warna_image = cv2.cvtColor(mask_sour, cv2.COLOR_GRAY2BGR)
     
+    # ===== 4. Analisis Tekstur Permukaan =====
+    # Gunakan Laplacian untuk deteksi tekstur
+    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+    tekstur_permukaan_image = cv2.convertScaleAbs(laplacian)
+    tekstur_permukaan_image = cv2.cvtColor(tekstur_permukaan_image, cv2.COLOR_GRAY2BGR)
+    
+    # ===== Kalkulasi Skor Akhir Mutu =====
+    # Berdasarkan kriteria dari gambar:
+    # - Bentuk Normal: Circularity ideal (0.85) → +0 pts
+    # - Tekstur Utuh: Tidak ditemukan retakan signifikan → +0 pts
+    # - Cacat Partial Sour: Area cokelat/keruh 100.0% → -25 pts
+    # Total base score = 100 pts
+    
+    base_score = 100
+    
+    # Penyesuaian berdasarkan bentuk normal
+    if bentuk_normal < 0.75:
+        base_score -= 25 * (0.75 - bentuk_normal) / 0.75
+    
+    # Penyesuaian berdasarkan tekstur utuh
+    if tekstur_utuh < 0.85:
+        base_score -= 25 * (0.85 - tekstur_utuh) / 0.85
+    
+    # Penyesuaian berdasarkan cacat partial sour
+    if sour_percentage > 0.1:
+        base_score -= 25 * min(1.0, sour_percentage / 1.0)
+    
+    skor_akhir = max(0, min(100, base_score))
+    
+    return {
+        "bentuk_normal": float(bentuk_normal),
+        "tekstur_utuh": float(tekstur_utuh),
+        "cacat_partial_sour": float(cacat_partial_sour),
+        "skor_akhir": float(skor_akhir),
+        "geometri_image": geometri_image,
+        "pola_retakan_image": pola_retakan_image,
+        "klaster_warna_image": klaster_warna_image,
+        "tekstur_permukaan_image": tekstur_permukaan_image,
+    }
+
+
 # ============================================================================
 # FITUR BARU 1: QUANTIZATION (Kuantisasi - Pengurangan Kedalaman Warna)
 # ============================================================================
@@ -724,45 +766,62 @@ def feature_matching_sift(image1: np.ndarray, image2: np.ndarray, max_matches: i
 def feature_matching_template(template: np.ndarray, image: np.ndarray) -> dict:
     """
     Template Matching: Cari posisi template dalam gambar yang lebih besar.
-    
+
     Cocok untuk:
     - Mendeteksi pola retakan yang sama di berbagai lokasi
     - Matching kerusakan pavement yang terlihat identik
-    
+    - Untuk gambar sama besar: akan otomatis crop template dari center
+
     Args:
-        template: Template citra (BGR, ukuran lebih kecil)
-        image: Citra target untuk dicari (BGR, ukuran lebih besar)
-    
+        template: Template citra (BGR)
+        image: Citra target untuk dicari (BGR)
+
     Returns:
         dict dengan match locations dan scores
     """
     try:
-        # Pastikan template lebih kecil dari image
-        if template.shape[0] >= image.shape[0] or template.shape[1] >= image.shape[1]:
-            return {
-                "matched_locations": [],
-                "error": "Template harus lebih kecil dari image",
-            }
-        
+        template_img = template.copy()
+        search_img = image.copy()
+
+        # Jika template lebih besar atau sama dengan image, crop template dari center
+        if template_img.shape[0] >= search_img.shape[0] or template_img.shape[1] >= search_img.shape[1]:
+            # Crop template menjadi 70% dari dimensi yang lebih kecil
+            max_h = min(int(search_img.shape[0] * 0.7), int(template_img.shape[0] * 0.7))
+            max_w = min(int(search_img.shape[1] * 0.7), int(template_img.shape[1] * 0.7))
+
+            # Crop dari center
+            t_h, t_w = template_img.shape[:2]
+            start_y = (t_h - max_h) // 2
+            start_x = (t_w - max_w) // 2
+            template_img = template_img[start_y:start_y+max_h, start_x:start_x+max_w]
+
+            # Jika search_img juga terlalu kecil, skip
+            if template_img.shape[0] >= search_img.shape[0] or template_img.shape[1] >= search_img.shape[1]:
+                return {
+                    "matched_locations": [],
+                    "error": "Gambar terlalu kecil untuk template matching. Gunakan SIFT untuk gambar dengan ukuran sangat berbeda.",
+                    "suggestion": "Coba gunakan SIFT Matching untuk perbandingan gambar ini",
+                }
+
         # Multi-scale template matching
-        gray_template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        
+        gray_template = cv2.cvtColor(template_img, cv2.COLOR_BGR2GRAY)
+        gray_image = cv2.cvtColor(search_img, cv2.COLOR_BGR2GRAY)
+
         matches = []
-        
+
         # Coba berbagai scale (0.5x, 0.75x, 1.0x, 1.25x, 1.5x)
         for scale in [0.5, 0.75, 1.0, 1.25, 1.5]:
             scaled_template = cv2.resize(gray_template, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-            
+
             if scaled_template.shape[0] >= gray_image.shape[0] or scaled_template.shape[1] >= gray_image.shape[1]:
                 continue
-            
+
             # Template matching dengan correlation coefficient
             result = cv2.matchTemplate(gray_image, scaled_template, cv2.TM_CCOEFF_NORMED)
-            
+
             # Cari local maxima (threshold > 0.7)
             loc = np.where(result >= 0.7)
-            
+
             for pt in zip(*loc[::-1]):
                 matches.append({
                     "x": int(pt[0]),
@@ -776,25 +835,42 @@ def feature_matching_template(template: np.ndarray, image: np.ndarray) -> dict:
         # Sort by confidence
         matches.sort(key=lambda x: x["confidence"], reverse=True)
         
-        # Draw matches pada image
-        overlay = image.copy()
-        for i, match in enumerate(matches[:10]):  # Tampilkan top 10
+        # PERBAIKAN BUG 2: Filter overlap (Non-Maximum Suppression sederhana)
+        filtered_matches = []
+        for match in matches:
+            overlap = False
+            for f_match in filtered_matches:
+                # Hitung jarak titik tengah antar kotak
+                dist = np.sqrt((match["x"] - f_match["x"])**2 + (match["y"] - f_match["y"])**2)
+                # Jika jaraknya kurang dari setengah lebar template, anggap objek yang sama
+                if dist < (match["width"] / 2):
+                    overlap = True
+                    break
+            
+            if not overlap:
+                filtered_matches.append(match)
+                if len(filtered_matches) >= 10:  # Batasi top 10 kotak yang terpisah
+                    break
+        
+        # Draw matches pada image menggunakan filtered_matches
+        overlay = search_img.copy()
+        for i, match in enumerate(filtered_matches):
             x, y = match["x"], match["y"]
             w, h = match["width"], match["height"]
-            color = (0, 255 - i*20, i*20)  # Color gradient
+            color = (0, 255 - (i * 20), i * 20)  # Color gradient
             cv2.rectangle(overlay, (x, y), (x+w, y+h), color, 2)
             cv2.putText(overlay, f"{match['confidence']:.2f}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        
+
         from app.utils.image_io import encode_image_base64
         viz_base64 = encode_image_base64(overlay)
-        
+
         return {
-            "matched_locations": matches[:20],  # Top 20 matches
-            "total_matches": len(matches),
-            "template_width": template.shape[1],
-            "template_height": template.shape[0],
-            "image_width": image.shape[1],
-            "image_height": image.shape[0],
+            "matched_locations": filtered_matches,
+            "total_matches": len(filtered_matches),
+            "template_width": template_img.shape[1],
+            "template_height": template_img.shape[0],
+            "image_width": search_img.shape[1],
+            "image_height": search_img.shape[0],
             "visualization_base64": viz_base64,
         }
     
@@ -803,45 +879,3 @@ def feature_matching_template(template: np.ndarray, image: np.ndarray) -> dict:
             "matched_locations": [],
             "error": str(e),
         }
-    
-    klaster_warna_image = cv2.cvtColor(mask_sour, cv2.COLOR_GRAY2BGR)
-    
-    # ===== 4. Analisis Tekstur Permukaan =====
-    # Gunakan Laplacian untuk deteksi tekstur
-    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-    tekstur_permukaan_image = cv2.convertScaleAbs(laplacian)
-    tekstur_permukaan_image = cv2.cvtColor(tekstur_permukaan_image, cv2.COLOR_GRAY2BGR)
-    
-    # ===== Kalkulasi Skor Akhir Mutu =====
-    # Berdasarkan kriteria dari gambar:
-    # - Bentuk Normal: Circularity ideal (0.85) → +0 pts
-    # - Tekstur Utuh: Tidak ditemukan retakan signifikan → +0 pts
-    # - Cacat Partial Sour: Area cokelat/keruh 100.0% → -25 pts
-    # Total base score = 100 pts
-    
-    base_score = 100
-    
-    # Penyesuaian berdasarkan bentuk normal
-    if bentuk_normal < 0.75:
-        base_score -= 25 * (0.75 - bentuk_normal) / 0.75
-    
-    # Penyesuaian berdasarkan tekstur utuh
-    if tekstur_utuh < 0.85:
-        base_score -= 25 * (0.85 - tekstur_utuh) / 0.85
-    
-    # Penyesuaian berdasarkan cacat partial sour
-    if sour_percentage > 0.1:
-        base_score -= 25 * min(1.0, sour_percentage / 1.0)
-    
-    skor_akhir = max(0, min(100, base_score))
-    
-    return {
-        "bentuk_normal": float(bentuk_normal),
-        "tekstur_utuh": float(tekstur_utuh),
-        "cacat_partial_sour": float(cacat_partial_sour),
-        "skor_akhir": float(skor_akhir),
-        "geometri_image": geometri_image,
-        "pola_retakan_image": pola_retakan_image,
-        "klaster_warna_image": klaster_warna_image,
-        "tekstur_permukaan_image": tekstur_permukaan_image,
-    }

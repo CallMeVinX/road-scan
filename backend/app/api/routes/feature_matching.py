@@ -94,26 +94,17 @@ async def compare_matching_methods(
     image1: UploadFile = File(...),
     image2: UploadFile = File(...),
 ) -> dict:
-    """
-    Bandingkan dua metode feature matching (SIFT vs Template).
-    
-    Endpoint ini membantu:
-    1. Mendemonstrasikan pemahaman berbagai matching techniques
-    2. Menunjukkan strength/weakness masing-masing metode
-    3. Memenuhi requirement "Feature Detection and Matching"
-    
-    Returns:
-        JSON dengan hasil kedua metode untuk perbandingan
-    """
+
     img1 = await read_upload_image(image1)
     img2 = await read_upload_image(image2)
-    
-    # SIFT matching
+
+    # SIFT matching (bisa menerima ukuran gambar sama)
     sift_result = feature_matching_sift(img1, img2, max_matches=20)
-    
-    # Template matching (gunakan img1 sebagai template)
+
+    # Template matching: gunakan img1 sebagai template, img2 sebagai search image
+    # Jika ukuran berbeda jauh, feature_matching_template akan otomatis handle
     template_result = feature_matching_template(img1, img2)
-    
+
     return {
         "comparison": {
             "sift": {
@@ -126,7 +117,10 @@ async def compare_matching_methods(
             "template_matching": {
                 "method": "Template_Matching",
                 "matched_locations": len(template_result.get("matched_locations", [])),
+                "total_matches": template_result.get("total_matches", 0),
                 "visualization_base64": template_result.get("visualization_base64"),
+                "error": template_result.get("error"),
+                "suggestion": template_result.get("suggestion"),
             },
         },
         "analysis": {

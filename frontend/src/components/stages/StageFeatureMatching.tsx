@@ -44,8 +44,6 @@ export function StageFeatureMatching({ uploadedImage }: StageFeatureMatchingProp
 
     setIsLoading(true)
     const formData = new FormData()
-    formData.append('image1', img1)
-    formData.append('image2', img2)
 
     try {
       let endpoint = ''
@@ -53,13 +51,19 @@ export function StageFeatureMatching({ uploadedImage }: StageFeatureMatchingProp
       switch (method) {
         case 'sift':
           endpoint = 'http://127.0.0.1:8000/api/v1/feature-matching/sift'
+          formData.append('image1', img1)
+          formData.append('image2', img2)
           formData.append('max_matches', '20')
           break
         case 'template':
           endpoint = 'http://127.0.0.1:8000/api/v1/feature-matching/template'
+          formData.append('template', img1)
+          formData.append('image', img2)
           break
         case 'compare':
           endpoint = 'http://127.0.0.1:8000/api/v1/feature-matching/compare-methods'
+          formData.append('image1', img1)
+          formData.append('image2', img2)
           break
       }
 
@@ -75,6 +79,7 @@ export function StageFeatureMatching({ uploadedImage }: StageFeatureMatchingProp
       if (data.visualization_base64) {
         setResultImage(`data:image/png;base64,${data.visualization_base64}`)
       } else if (data.comparison?.sift?.visualization_base64) {
+        // For compare method, prioritize SIFT visualization
         setResultImage(`data:image/png;base64,${data.comparison.sift.visualization_base64}`)
       }
 
@@ -179,6 +184,19 @@ export function StageFeatureMatching({ uploadedImage }: StageFeatureMatchingProp
           ))}
         </div>
 
+        {/* Method Explanation */}
+        <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800">
+          {activeMethod === 'sift' && (
+            <p><strong>SIFT:</strong> Cocok untuk membandingkan 2 gambar dengan ukuran dan perspektif berbeda. Menemukan keypoints unik yang match antar gambar.</p>
+          )}
+          {activeMethod === 'template' && (
+            <p><strong>Template Matching:</strong> Mencari lokasi pola template di dalam gambar. Menampilkan bounding boxes tempat pola ditemukan. Jika ukuran berbeda jauh, akan otomatis crop template dari center.</p>
+          )}
+          {activeMethod === 'compare' && (
+            <p><strong>Compare Methods:</strong> Membandingkan hasil SIFT dan Template Matching pada 2 gambar yang sama.</p>
+          )}
+        </div>
+
         {/* Process Button */}
         <button
           onClick={() => processMatching(activeMethod)}
@@ -194,12 +212,36 @@ export function StageFeatureMatching({ uploadedImage }: StageFeatureMatchingProp
         {/* Main Result */}
         {resultImage && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Hasil Matching</h3>
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">
+              {activeMethod === 'compare' ? 'SIFT Visualization' : 'Hasil Matching'}
+            </h3>
             <img
               src={resultImage}
               alt="Matching result"
               className="w-full rounded-xl border border-slate-200"
             />
+            {activeMethod === 'compare' && matchStats?.comparison?.template_matching?.visualization_base64 && (
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Template Matching Visualization</h3>
+                <img
+                  src={`data:image/png;base64,${matchStats.comparison.template_matching.visualization_base64}`}
+                  alt="Template matching result"
+                  className="w-full rounded-xl border border-slate-200"
+                />
+              </div>
+            )}
+            {activeMethod === 'compare' && !matchStats?.comparison?.template_matching?.visualization_base64 && matchStats?.comparison?.template_matching?.error && (
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <p className="text-sm text-amber-600">
+                  ⚠️ Template Matching: {matchStats.comparison.template_matching.error}
+                </p>
+                {matchStats.comparison.template_matching.suggestion && (
+                  <p className="text-sm text-blue-600 mt-2">
+                    💡 {matchStats.comparison.template_matching.suggestion}
+                  </p>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -230,7 +272,17 @@ export function StageFeatureMatching({ uploadedImage }: StageFeatureMatchingProp
                 </div>
               )}
 
-              {matchStats.total_matches !== undefined && (
+              {matchStats.total_matches !== undefined && activeMethod === 'template' && (
+                <div className="bg-green-50 rounded-lg p-3">
+                  <p className="text-slate-600">Lokasi Template Ditemukan</p>
+                  <p className="text-lg font-bold text-green-600">{matchStats.total_matches}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Bounding boxes menunjukkan lokasi pola yang cocok dalam gambar
+                  </p>
+                </div>
+              )}
+
+              {matchStats.total_matches !== undefined && activeMethod !== 'template' && (
                 <div className="bg-green-50 rounded-lg p-3">
                   <p className="text-slate-600">Total Matches</p>
                   <p className="text-lg font-bold text-green-600">{matchStats.total_matches}</p>
@@ -248,15 +300,31 @@ export function StageFeatureMatching({ uploadedImage }: StageFeatureMatchingProp
                   <div className="bg-purple-50 rounded-lg p-3">
                     <p className="text-xs text-slate-600">Template Matches</p>
                     <p className="text-lg font-bold text-purple-600">
-                      {matchStats.comparison.template_matching.matched_locations}
+                      {matchStats.comparison.template_matching.total_matches || matchStats.comparison.template_matching.matched_locations}
                     </p>
+                    {matchStats.comparison.template_matching.error && (
+                      <p className="text-xs text-red-600 mt-2">
+                        ⚠️ {matchStats.comparison.template_matching.error}
+                      </p>
+                    )}
+                    {matchStats.comparison.template_matching.suggestion && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        💡 {matchStats.comparison.template_matching.suggestion}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
 
               {matchStats.error && (
                 <div className="bg-red-50 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-red-600 mb-1">Error</p>
                   <p className="text-xs text-red-600">{matchStats.error}</p>
+                  {matchStats.suggestion && (
+                    <p className="text-xs text-amber-600 mt-2 border-t border-red-200 pt-2">
+                      💡 {matchStats.suggestion}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

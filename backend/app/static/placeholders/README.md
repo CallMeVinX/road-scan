@@ -4,11 +4,8 @@ Folder ini berisi gambar placeholder untuk demonstrasi aplikasi Road Scan.
 
 ## Gambar yang tersedia:
 
-1. road_damage_1.jpg - Gambar jalan rusak dengan retakan besar
-2. road_damage_2.jpg - Gambar jalan dengan lubang
-3. road_damage_3.jpg - Gambar jalan dengan kerusakan multiple
-4. road_normal_1.jpg - Gambar jalan normal untuk perbandingan
-5. road_normal_2.jpg - Gambar jalan dalam kondisi baik
+1. road_broken* - Gambar jalan yang memilki kerusakan
+2. road_safe* - Gambar jalan yang tidak memiliki kerusakan
 
 ## Cara menambahkan gambar:
 
