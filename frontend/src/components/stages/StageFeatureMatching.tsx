@@ -108,7 +108,6 @@ export function StageFeatureMatching({ uploadedImage }: StageFeatureMatchingProp
           <h2 className="text-lg font-semibold text-slate-900">Feature Detection & Matching</h2>
           <p className="mt-1 text-sm text-slate-600">
             Mencocokkan fitur antara dua gambar menggunakan SIFT atau Template Matching.
-            Memenuhi silabus "Feature Detection and Matching" (kekurangan #3).
           </p>
         </div>
 

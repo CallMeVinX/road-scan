@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { UploadedImageData } from '../../types'
 
-type NoiseMethod = 'salt_pepper' | 'gaussian' | 'bilateral' | 'morphology' | 'compare'
+// Tambahkan 'median' ke dalam type
+type NoiseMethod = 'salt_pepper' | 'gaussian' | 'bilateral' | 'morphology' | 'median' | 'compare'
 
 interface StageNoiseProps {
   uploadedImage: UploadedImageData | null
@@ -12,8 +13,13 @@ export function StageNoise({ uploadedImage }: StageNoiseProps) {
   const [stats, setStats] = useState<{ [key: string]: any }>({})
   const [isLoading, setIsLoading] = useState(false)
   const [activeMethod, setActiveMethod] = useState<NoiseMethod>('salt_pepper')
+  
+  // Parameter State
   const [saltPepperProb, setSaltPepperProb] = useState<number>(0.05)
   const [gaussianStd, setGaussianStd] = useState<number>(25)
+  
+  // State baru untuk mengontrol noise apa yang ingin diuji saat mode "Compare"
+  const [compareNoiseType, setCompareNoiseType] = useState<'salt_pepper' | 'gaussian'>('salt_pepper')
 
   const processNoise = async (method: NoiseMethod) => {
     if (!uploadedImage || !uploadedImage.file) {
@@ -43,10 +49,20 @@ export function StageNoise({ uploadedImage }: StageNoiseProps) {
         case 'morphology':
           endpoint = 'http://127.0.0.1:8000/api/v1/noise/remove-morphology'
           break
+        case 'median': // Endpoint Baru
+          endpoint = 'http://127.0.0.1:8000/api/v1/noise/remove-median'
+          break
         case 'compare':
           endpoint = 'http://127.0.0.1:8000/api/v1/noise/compare'
-          formData.append('noise_type', 'salt_pepper')
-          formData.append('noise_intensity', (saltPepperProb * 2).toString())
+          // Tidak ada lagi hardcode. Menggunakan pilihan dinamis dari user.
+          formData.append('noise_type', compareNoiseType)
+          
+          // Sesuaikan kalkulasi intensitas berdasarkan jenis noise
+          const intensity = compareNoiseType === 'salt_pepper' 
+            ? saltPepperProb.toString() 
+            : (gaussianStd / 100).toString()
+            
+          formData.append('noise_intensity', intensity)
           break
       }
 
@@ -58,7 +74,6 @@ export function StageNoise({ uploadedImage }: StageNoiseProps) {
       if (!response.ok) throw new Error(`Gagal memproses ${method}`)
       const data = await response.json()
       
-      // Set hasil gambar
       const newResults = { ...resultImages }
       const newStats = { ...stats }
       
@@ -68,10 +83,13 @@ export function StageNoise({ uploadedImage }: StageNoiseProps) {
       if (data.denoised_image_base64) {
         newResults[method] = `data:image/png;base64,${data.denoised_image_base64}`
       }
+      
+      // Tangkap semua gambar dari hasil komparasi
       if (data.results) {
         newResults['noisy'] = `data:image/png;base64,${data.results.noisy_image_base64}`
         newResults['bilateral'] = `data:image/png;base64,${data.results.bilateral_filtered_base64}`
         newResults['morphology'] = `data:image/png;base64,${data.results.morphology_filtered_base64}`
+        newResults['median'] = `data:image/png;base64,${data.results.median_filtered_base64}` // Tangkap Median
       }
       
       newStats[method] = data.noise_stats || data.filter_stats || data.filter_comparison
@@ -91,27 +109,28 @@ export function StageNoise({ uploadedImage }: StageNoiseProps) {
       'gaussian': 'Gaussian Noise',
       'bilateral': 'Bilateral Filter',
       'morphology': 'Morphology Filter',
+      'median': 'Median Filter',
       'compare': 'Compare Methods'
     }
     return labels[method]
   }
 
-  const isAddMethod = ['salt_pepper', 'gaussian'].includes(activeMethod)
-
+  const showSaltPepperSlider = activeMethod === 'salt_pepper' || (activeMethod === 'compare' && compareNoiseType === 'salt_pepper');
+  const showGaussianSlider = activeMethod === 'gaussian' || (activeMethod === 'compare' && compareNoiseType === 'gaussian');
+  
   return (
     <div className="grid gap-6">
-      {/* Kontrol Panel */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-900">Simulasi & Penghilangan Noise</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Demonstrasi pemahaman bentuk data noise (Salt & Pepper, Gaussian) dan teknik removal. Memenuhi sub-CPMK requirement.
+            Demonstrasi pemahaman bentuk data noise dan perbandingan teknik removal yang rasional.
           </p>
         </div>
 
-        {/* Method Selection */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
-          {(['salt_pepper', 'gaussian', 'bilateral', 'morphology', 'compare'] as const).map((method) => (
+        {/* Update Grid agar pas untuk 6 tombol */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
+          {(['salt_pepper', 'gaussian', 'bilateral', 'morphology', 'median', 'compare'] as const).map((method) => (
             <button
               key={method}
               onClick={() => setActiveMethod(method)}
@@ -126,101 +145,103 @@ export function StageNoise({ uploadedImage }: StageNoiseProps) {
           ))}
         </div>
 
-        {/* Parameter Controls */}
-        {isAddMethod && (
-          <div className="space-y-4 mb-4">
-            {activeMethod === 'salt_pepper' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Probability: <span className="text-blue-600 font-bold">{(saltPepperProb * 100).toFixed(1)}%</span>
-                </label>
-                <input
-                  type="range"
-                  min="0.01"
-                  max="0.3"
-                  step="0.01"
-                  value={saltPepperProb}
-                  onChange={(e) => setSaltPepperProb(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-slate-200 rounded-lg cursor-pointer"
+        {/* Dynamic Parameter Controls yang Diperbaiki */}
+        <div className="space-y-4 mb-4">
+          {showSaltPepperSlider && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Probability: <span className="text-blue-600 font-bold">{(saltPepperProb * 100).toFixed(1)}%</span>
+              </label>
+              <input
+                type="range" min="0.01" max="0.3" step="0.01"
+                value={saltPepperProb}
+                onChange={(e) => setSaltPepperProb(parseFloat(e.target.value))}
+                className="w-full h-2 bg-slate-200 rounded-lg cursor-pointer"
+              />
+            </div>
+          )}
+          {showGaussianSlider && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Standard Deviation: <span className="text-blue-600 font-bold">{gaussianStd.toFixed(1)}</span>
+              </label>
+              <input
+                type="range" min="1" max="100" step="1"
+                value={gaussianStd}
+                onChange={(e) => setGaussianStd(parseInt(e.target.value))}
+                className="w-full h-2 bg-slate-200 rounded-lg cursor-pointer"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Kontrol Khusus untuk Tab Compare */}
+        {activeMethod === 'compare' && (
+          <div className="mb-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Pilih Skenario Noise untuk Pengujian:
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center space-x-2 text-sm">
+                <input 
+                  type="radio" value="salt_pepper" 
+                  checked={compareNoiseType === 'salt_pepper'}
+                  onChange={(e) => setCompareNoiseType(e.target.value as any)}
+                  className="text-blue-600"
                 />
-              </div>
-            )}
-            {activeMethod === 'gaussian' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Standard Deviation: <span className="text-blue-600 font-bold">{gaussianStd.toFixed(1)}</span>
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max="100"
-                  step="1"
-                  value={gaussianStd}
-                  onChange={(e) => setGaussianStd(parseInt(e.target.value))}
-                  className="w-full h-2 bg-slate-200 rounded-lg cursor-pointer"
+                <span>Salt & Pepper (Prob: {(saltPepperProb * 100).toFixed(1)}%)</span>
+              </label>
+              <label className="flex items-center space-x-2 text-sm">
+                <input 
+                  type="radio" value="gaussian" 
+                  checked={compareNoiseType === 'gaussian'}
+                  onChange={(e) => setCompareNoiseType(e.target.value as any)}
+                  className="text-blue-600"
                 />
-              </div>
-            )}
+                <span>Gaussian (Std Dev: {gaussianStd})</span>
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-slate-500 italic">
+              *Intensitas noise akan mengambil nilai dari slider pada tab masing-masing noise.
+            </p>
           </div>
         )}
 
-        {/* Process Button */}
         <button
           onClick={() => processNoise(activeMethod)}
           disabled={isLoading || !uploadedImage}
           className="w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
         >
-          {isLoading ? 'Memproses...' : `Proses: ${getMethodLabel(activeMethod)}`}
+          {isLoading ? 'Memproses Analisis...' : `Proses: ${getMethodLabel(activeMethod)}`}
         </button>
       </section>
 
-      {/* Results Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Results Grid - Diubah menjadi 4 kolom (atau 2x2) untuk memuat hasil Compare */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {activeMethod === 'compare' ? (
           <>
             {resultImages['noisy'] && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 overflow-hidden">
-                <h3 className="text-sm font-semibold text-slate-900 mb-2">Noise Added</h3>
-                <img
-                  src={resultImages['noisy']}
-                  alt="Noisy"
-                  className="w-full rounded-lg border border-slate-200"
-                />
-                <div className="mt-2 text-xs text-slate-600">
-                  {stats['compare']?.noise_stats && (
-                    <p>Noise: {(stats['compare'].noise_stats.noise_percentage || 0).toFixed(2)}%</p>
-                  )}
-                </div>
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                <h3 className="text-sm font-semibold text-slate-900 mb-2">1. Input: Noisy Image</h3>
+                <img src={resultImages['noisy']} alt="Noisy" className="w-full rounded-lg shadow-sm" />
               </div>
             )}
             {resultImages['bilateral'] && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 overflow-hidden">
-                <h3 className="text-sm font-semibold text-slate-900 mb-2">Bilateral Filter</h3>
-                <img
-                  src={resultImages['bilateral']}
-                  alt="Bilateral"
-                  className="w-full rounded-lg border border-slate-200"
-                />
-                <div className="mt-2 text-xs text-slate-600">
-                  {stats['compare']?.filter_comparison?.bilateral_stats && (
-                    <p>Reduction: {(stats['compare'].filter_comparison.bilateral_stats.avg_noise_reduction || 0).toFixed(2)}</p>
-                  )}
-                </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <h3 className="text-sm font-semibold text-slate-900 mb-2">2. Bilateral Filter</h3>
+                <img src={resultImages['bilateral']} alt="Bilateral" className="w-full rounded-lg shadow-sm" />
               </div>
             )}
             {resultImages['morphology'] && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 overflow-hidden">
-                <h3 className="text-sm font-semibold text-slate-900 mb-2">Morphology Filter</h3>
-                <img
-                  src={resultImages['morphology']}
-                  alt="Morphology"
-                  className="w-full rounded-lg border border-slate-200"
-                />
-                <div className="mt-2 text-xs text-slate-600">
-                  {stats['compare']?.filter_comparison?.morphology_stats && (
-                    <p>Filter Type: {stats['compare'].filter_comparison.morphology_stats.filter_type}</p>
-                  )}
-                </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <h3 className="text-sm font-semibold text-slate-900 mb-2">3. Morphology Filter</h3>
+                <img src={resultImages['morphology']} alt="Morphology" className="w-full rounded-lg shadow-sm" />
+              </div>
+            )}
+            {resultImages['median'] && (
+              <div className="rounded-2xl border border-green-200 bg-green-50 p-4">
+                <h3 className="text-sm font-semibold text-slate-900 mb-2">4. Median Filter</h3>
+                <img src={resultImages['median']} alt="Median" className="w-full rounded-lg shadow-sm" />
               </div>
             )}
           </>
@@ -228,20 +249,7 @@ export function StageNoise({ uploadedImage }: StageNoiseProps) {
           resultImages[activeMethod] && (
             <div className="rounded-2xl border border-slate-200 bg-white p-4 col-span-full md:col-span-1">
               <h3 className="text-sm font-semibold text-slate-900 mb-2">{getMethodLabel(activeMethod)}</h3>
-              <img
-                src={resultImages[activeMethod]}
-                alt="Result"
-                className="w-full rounded-lg border border-slate-200"
-              />
-              {stats[activeMethod] && (
-                <div className="mt-3 space-y-1 text-xs text-slate-600">
-                  {Object.entries(stats[activeMethod]).map(([key, value]: [string, any]) => (
-                    <p key={key}>
-                      <span className="font-medium capitalize">{key.replace(/_/g, ' ')}:</span> {String(value).slice(0, 50)}
-                    </p>
-                  ))}
-                </div>
-              )}
+              <img src={resultImages[activeMethod]} alt="Result" className="w-full rounded-lg shadow-sm" />
             </div>
           )
         )}
@@ -249,7 +257,7 @@ export function StageNoise({ uploadedImage }: StageNoiseProps) {
 
       {Object.keys(resultImages).length === 0 && (
         <div className="text-center py-12 text-slate-400">
-          <p className="text-sm">Upload gambar dan klik tombol Proses untuk melihat hasil</p>
+          <p className="text-sm">Upload gambar dan klik tombol Proses untuk memulai komparasi</p>
         </div>
       )}
     </div>

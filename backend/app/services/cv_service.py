@@ -879,3 +879,17 @@ def feature_matching_template(template: np.ndarray, image: np.ndarray) -> dict:
             "matched_locations": [],
             "error": str(e),
         }
+
+def remove_noise_median(image: np.ndarray, kernel_size: int = 5) -> tuple[np.ndarray, dict]:
+    # Median filter butuh ukuran kernel angka ganjil (3, 5, 7, dst)
+    k = max(3, min(kernel_size, 21))
+    if k % 2 == 0:
+        k += 1
+        
+    denoised = cv2.medianBlur(image, k)
+    
+    stats = {
+        "filter_type": "median",
+        "kernel_size": k,
+    }
+    return denoised, stats

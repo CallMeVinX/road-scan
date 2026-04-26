@@ -86,48 +86,54 @@ export function StagePavementDamageAnalysis({ uploadedImage }: StagePavementDama
   const getAssessmentItems = () => {
     const bentukNormal = analysisResult?.bentuk_normal || 0
     const teksturUtuh = analysisResult?.tekstur_utuh || 0
-    const cacatPartial = analysisResult?.cacat_partial_sour || 0
+    // Gunakan Math.abs karena python mengirim nilai negatif untuk cacat
+    const sourPercentage = Math.abs(analysisResult?.cacat_partial_sour || 0)
+
+    // 1. Kalkulasi penalti dinamis persis seperti di cv_service.py
+    const penaltiBentuk = bentukNormal < 0.75 ? Math.round(25 * (0.75 - bentukNormal) / 0.75) : 0;
+    const penaltiTekstur = teksturUtuh < 0.85 ? Math.round(25 * (0.85 - teksturUtuh) / 0.85) : 0;
+    const penaltiPigmen = sourPercentage > 0.1 ? Math.round(25 * Math.min(1.0, sourPercentage / 1.0)) : 0;
 
     const items = [
       {
         label: 'Bentuk Normal (Circularity)',
         value: bentukNormal,
-        score: bentukNormal >= 0.75 ? 0 : -25,
-        status: bentukNormal >= 0.75 ? 'success' : 'warning',
+        score: -penaltiBentuk, // Menggunakan penalti dinamis
+        status: penaltiBentuk === 0 ? 'success' : 'warning',
         description:
-          bentukNormal >= 0.75
-            ? `Bentuk lubang/cacat berbentuk normal dan terukur (${(bentukNormal * 100).toFixed(1)}%). Ini menunjukkan pola kerusakan yang konsisten dan mudah diidentifikasi.`
-            : `Bentuk cacat tidak teratur (${(bentukNormal * 100).toFixed(1)}%). Indikasi adanya kerusakan yang kompleks atau pola yang tidak standar.`,
+          penaltiBentuk === 0
+            ? `Bentuk cacat terukur secara standar (${(bentukNormal * 100).toFixed(1)}%). Menunjukkan pola kerusakan yang konsisten.`
+            : `Bentuk cacat tidak teratur (${(bentukNormal * 100).toFixed(1)}%). Indikasi kerusakan kompleks. (-${penaltiBentuk} poin)`,
         recommendation:
-          bentukNormal >= 0.75
+          penaltiBentuk === 0
             ? 'Pola kerusakan konsisten - pemeliharaan rutin sudah cukup'
             : 'Pola kerusakan tidak teratur - diperlukan inspeksi detail lebih lanjut',
       },
       {
         label: 'Tekstur Permukaan',
         value: teksturUtuh,
-        score: teksturUtuh >= 0.75 ? 0 : -25,
-        status: teksturUtuh >= 0.75 ? 'success' : 'warning',
+        score: -penaltiTekstur, // Menggunakan penalti dinamis
+        status: penaltiTekstur === 0 ? 'success' : 'warning',
         description:
-          teksturUtuh >= 0.75
-            ? `Permukaan jalan masih utuh dan tidak ditemukan retakan signifikan (${(teksturUtuh * 100).toFixed(1)}%). Struktur permukaan masih dalam kondisi baik.`
-            : `Retakan dan kerusakan ditemukan pada permukaan (${(teksturUtuh * 100).toFixed(1)}%). Struktur lapisan mulai mengalami degradasi.`,
+          penaltiTekstur === 0
+            ? `Permukaan tidak memiliki retakan signifikan (${(teksturUtuh * 100).toFixed(1)}%). Struktur masih baik.`
+            : `Retakan ditemukan pada permukaan (${(teksturUtuh * 100).toFixed(1)}%). Struktur mengalami degradasi. (-${penaltiTekstur} poin)`,
         recommendation:
-          teksturUtuh >= 0.75
+          penaltiTekstur === 0
             ? 'Kondisi tekstur baik - lanjutkan pemantauan berkala'
             : 'Tekstur rusak - segera lakukan perbaikan untuk mencegah perburukan',
       },
       {
         label: 'Kondisi Pigmen Jalan',
-        value: Math.abs(cacatPartial),
-        score: cacatPartial >= 0 ? -25 : 0,
-        status: cacatPartial >= 0 ? 'warning' : 'success',
+        value: sourPercentage,
+        score: -penaltiPigmen, // Menggunakan penalti dinamis
+        status: penaltiPigmen === 0 ? 'success' : 'warning',
         description:
-          cacatPartial >= 0
-            ? 'Area dengan pigmen pudar/keruh terdeteksi. Ini menunjukkan proses oksidasi dan degradasi material aspal yang mulai terjadi.'
-            : `Pigmen jalan masih dalam kondisi baik dengan warna yang stabil. Material masih dalam fase awal degradasi.`,
+          penaltiPigmen > 0
+            ? `Area dengan pigmen pudar/keruh terdeteksi (${(sourPercentage * 100).toFixed(1)}%). Terjadi degradasi material aspal. (-${penaltiPigmen} poin)`
+            : `Pigmen jalan dalam kondisi baik. Material masih stabil dalam batas toleransi.`,
         recommendation:
-          cacatPartial >= 0
+          penaltiPigmen > 0
             ? 'Mulai perencanaan penyegelan atau pelapisan ulang dalam 6-12 bulan'
             : 'Kondisi pigmen stabil - lanjutkan pemeliharaan preventif',
       },
