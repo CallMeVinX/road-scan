@@ -84,30 +84,52 @@ export function StagePavementDamageAnalysis({ uploadedImage }: StagePavementDama
   }
 
   const getAssessmentItems = () => {
+    const bentukNormal = analysisResult?.bentuk_normal || 0
+    const teksturUtuh = analysisResult?.tekstur_utuh || 0
+    const cacatPartial = analysisResult?.cacat_partial_sour || 0
+
     const items = [
       {
-        label: 'Bentuk Normal',
-        value: analysisResult?.bentuk_normal || 0,
-        status: (analysisResult?.bentuk_normal || 0) >= 0.75 ? 'success' : 'warning',
+        label: 'Bentuk Normal (Circularity)',
+        value: bentukNormal,
+        score: bentukNormal >= 0.75 ? 0 : -25,
+        status: bentukNormal >= 0.75 ? 'success' : 'warning',
         description:
-          (analysisResult?.bentuk_normal || 0) >= 0.75
-            ? 'Circularity ideal (0.85). (+0 pts)'
-            : 'Circularity di bawah standar. (-25 pts)',
+          bentukNormal >= 0.75
+            ? `Bentuk lubang/cacat berbentuk normal dan terukur (${(bentukNormal * 100).toFixed(1)}%). Ini menunjukkan pola kerusakan yang konsisten dan mudah diidentifikasi.`
+            : `Bentuk cacat tidak teratur (${(bentukNormal * 100).toFixed(1)}%). Indikasi adanya kerusakan yang kompleks atau pola yang tidak standar.`,
+        recommendation:
+          bentukNormal >= 0.75
+            ? 'Pola kerusakan konsisten - pemeliharaan rutin sudah cukup'
+            : 'Pola kerusakan tidak teratur - diperlukan inspeksi detail lebih lanjut',
       },
       {
-        label: 'Tekstur Utuh',
-        value: analysisResult?.tekstur_utuh || 0,
-        status: (analysisResult?.tekstur_utuh || 0) >= 0.75 ? 'success' : 'warning',
+        label: 'Tekstur Permukaan',
+        value: teksturUtuh,
+        score: teksturUtuh >= 0.75 ? 0 : -25,
+        status: teksturUtuh >= 0.75 ? 'success' : 'warning',
         description:
-          (analysisResult?.tekstur_utuh || 0) >= 0.75
-            ? 'Tidak ditemukan retakan signifikan. (+0 pts)'
-            : 'Retakan ditemukan pada permukaan. (-25 pts)',
+          teksturUtuh >= 0.75
+            ? `Permukaan jalan masih utuh dan tidak ditemukan retakan signifikan (${(teksturUtuh * 100).toFixed(1)}%). Struktur permukaan masih dalam kondisi baik.`
+            : `Retakan dan kerusakan ditemukan pada permukaan (${(teksturUtuh * 100).toFixed(1)}%). Struktur lapisan mulai mengalami degradasi.`,
+        recommendation:
+          teksturUtuh >= 0.75
+            ? 'Kondisi tekstur baik - lanjutkan pemantauan berkala'
+            : 'Tekstur rusak - segera lakukan perbaikan untuk mencegah perburukan',
       },
       {
-        label: 'Cacat Partial Sour',
-        value: analysisResult?.cacat_partial_sour || 0,
-        status: (analysisResult?.cacat_partial_sour || 0) >= 0 ? 'warning' : 'success',
-        description: `Area cokelat/keruh 100.0%. (-25 pts)`,
+        label: 'Kondisi Pigmen Jalan',
+        value: Math.abs(cacatPartial),
+        score: cacatPartial >= 0 ? -25 : 0,
+        status: cacatPartial >= 0 ? 'warning' : 'success',
+        description:
+          cacatPartial >= 0
+            ? 'Area dengan pigmen pudar/keruh terdeteksi. Ini menunjukkan proses oksidasi dan degradasi material aspal yang mulai terjadi.'
+            : `Pigmen jalan masih dalam kondisi baik dengan warna yang stabil. Material masih dalam fase awal degradasi.`,
+        recommendation:
+          cacatPartial >= 0
+            ? 'Mulai perencanaan penyegelan atau pelapisan ulang dalam 6-12 bulan'
+            : 'Kondisi pigmen stabil - lanjutkan pemeliharaan preventif',
       },
     ]
     return items
@@ -132,19 +154,38 @@ export function StagePavementDamageAnalysis({ uploadedImage }: StagePavementDama
         <>
           {/* Section 1: Visualisasi Analisis */}
           <div>
-            <h3 className="mb-4 text-lg font-bold text-slate-900">1. Visualisasi Analisis</h3>
+            <h3 className="mb-4 text-lg font-bold text-slate-900">1. Visualisasi Analisis Permukaan Jalan</h3>
+            <p className="mb-4 text-sm text-slate-600">
+              Sistem analisis menggunakan 4 metode untuk memberikan gambaran lengkap tentang kondisi permukaan jalan:
+            </p>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               {[
-                { title: 'Geometri', key: 'geometri_base64' },
-                { title: 'Pola Retakan', key: 'pola_retakan_base64' },
-                { title: 'Klaster Warna', key: 'klaster_warna_base64' },
-                { title: 'Tekstur Permukaan', key: 'tekstur_permukaan_base64' },
+                { 
+                  title: 'Geometri', 
+                  key: 'geometri_base64',
+                  explanation: 'Mendeteksi bentuk dan ukuran kerusakan untuk menentukan tingkat keparahan'
+                },
+                { 
+                  title: 'Pola Retakan', 
+                  key: 'pola_retakan_base64',
+                  explanation: 'Mengidentifikasi pola retakan (linear, alligator, blok) untuk diagnosa akar masalah'
+                },
+                { 
+                  title: 'Klaster Warna', 
+                  key: 'klaster_warna_base64',
+                  explanation: 'Segmentasi warna untuk mendeteksi area dengan degradasi berbeda'
+                },
+                { 
+                  title: 'Tekstur Permukaan', 
+                  key: 'tekstur_permukaan_base64',
+                  explanation: 'Analisis tekstur untuk mengidentifikasi kehalusan dan kekasaran permukaan'
+                },
               ].map((item) => (
                 <div
                   key={item.key}
-                  className="flex flex-col items-center rounded-xl border border-slate-200 bg-white p-4"
+                  className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow"
                 >
-                  <div className="mb-3 flex h-24 w-24 items-center justify-center rounded-lg bg-slate-100">
+                  <div className="mb-3 flex h-24 w-24 mx-auto items-center justify-center rounded-lg bg-slate-100">
                     {analysisResult[item.key as keyof AnalysisResult] ? (
                       <img
                         src={`data:image/png;base64,${analysisResult[item.key as keyof AnalysisResult]}`}
@@ -158,7 +199,8 @@ export function StagePavementDamageAnalysis({ uploadedImage }: StagePavementDama
                       </div>
                     )}
                   </div>
-                  <p className="text-center text-sm font-semibold text-slate-700">{item.title}</p>
+                  <p className="text-center text-sm font-semibold text-slate-900 mb-2">{item.title}</p>
+                  <p className="text-center text-xs text-slate-600">{item.explanation}</p>
                 </div>
               ))}
             </div>
@@ -167,43 +209,127 @@ export function StagePavementDamageAnalysis({ uploadedImage }: StagePavementDama
           {/* Section 2: Rincian Penilaian */}
           <div>
             <h3 className="mb-4 text-lg font-bold text-slate-900">2. Rincian Penilaian</h3>
-            <div className="space-y-3">
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm text-blue-900">
+                <strong>Cara membaca:</strong> Setiap aspek dianalisis dengan sistem poin. Jika kondisi baik (✓) = 0 poin pengurangan. 
+                Jika ada masalah (⚠) = -25 poin. Skor akhir = 100 - total pengurangan.
+              </p>
+            </div>
+            <div className="space-y-4">
               {assessmentItems.map((item, index) => (
                 <div
                   key={index}
-                  className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${
+                  className={`overflow-hidden rounded-xl border px-4 py-4 ${
                     item.status === 'success'
                       ? 'border-green-200 bg-green-50'
                       : 'border-yellow-200 bg-yellow-50'
                   }`}
                 >
-                  <div className="mt-0.5">
-                    {item.status === 'success' ? (
-                      <CheckCircle2 size={20} className="text-green-600" />
-                    ) : (
-                      <AlertCircle size={20} className="text-yellow-600" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p
-                      className={`font-semibold ${item.status === 'success' ? 'text-green-700' : 'text-yellow-700'}`}
-                    >
-                      {item.label}
-                    </p>
-                    <p className={`text-sm ${item.status === 'success' ? 'text-green-600' : 'text-yellow-600'}`}>
-                      {item.description}
-                    </p>
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5">
+                      {item.status === 'success' ? (
+                        <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+                      ) : (
+                        <AlertCircle size={20} className="text-yellow-600 flex-shrink-0" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className={`font-semibold ${item.status === 'success' ? 'text-green-700' : 'text-yellow-700'}`}>
+                          {item.label}
+                        </p>
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap ${
+                            item.status === 'success'
+                              ? 'bg-green-200 text-green-800'
+                              : 'bg-yellow-200 text-yellow-800'
+                          }`}
+                        >
+                          {item.score > 0 ? '+' : ''}{item.score} poin
+                        </span>
+                      </div>
+                      <p className={`text-sm mb-2 ${item.status === 'success' ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {item.description}
+                      </p>
+                      <div className="mt-2 p-2 bg-white rounded border border-slate-200">
+                        <p className="text-xs font-semibold text-slate-700 mb-1">💡 Rekomendasi:</p>
+                        <p className="text-xs text-slate-600">{item.recommendation}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Section 3: Skor Akhir */}
-          <div className={`rounded-2xl border px-6 py-8 text-center ${statusColor}`}>
-            <p className="text-sm font-semibold uppercase tracking-wide opacity-80">Skor Akhir Mutu</p>
-            <p className="mt-2 text-6xl font-bold">{Math.round(finalScore)}</p>
-            <p className="mt-3 text-sm font-semibold">{statusLabel}</p>
+          {/* Section 3: Skor Akhir & Rekomendasi */}
+          <div>
+            <div className={`rounded-2xl border px-6 py-8 text-center ${statusColor}`}>
+              <p className="text-sm font-semibold uppercase tracking-wide opacity-80">Skor Akhir Mutu Jalan</p>
+              <p className="mt-2 text-6xl font-bold">{Math.round(finalScore)}</p>
+              <p className="mt-3 text-lg font-semibold">{statusLabel}</p>
+            </div>
+
+            {/* Penjelasan Skor & Rekomendasi */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+              {/* Penjelasan Kategori */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="font-semibold text-slate-900 mb-3">📊 Kategori Skor</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-green-500"></div>
+                    <span><strong>75-100:</strong> Sangat Baik (minimal perawatan)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-blue-500"></div>
+                    <span><strong>50-75:</strong> Baik (perawatan rutin)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-orange-500"></div>
+                    <span><strong>25-50:</strong> Rusak (perbaikan diperlukan)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-red-500"></div>
+                    <span><strong>0-25:</strong> Rusak Parah (rehab mendesak)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rekomendasi Aksi */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="font-semibold text-slate-900 mb-3">✅ Rekomendasi Aksi</h4>
+                <div className="space-y-2 text-sm">
+                  {finalScore >= 75 && (
+                    <>
+                      <p className="text-green-700">✓ Jalan dalam kondisi prima</p>
+                      <p className="text-slate-600">• Lanjutkan pemantauan rutin (3-6 bulan sekali)</p>
+                      <p className="text-slate-600">• Vakum dan pembersihan berkala</p>
+                    </>
+                  )}
+                  {finalScore >= 50 && finalScore < 75 && (
+                    <>
+                      <p className="text-blue-700">⚠ Jalan masih layak dengan perawatan</p>
+                      <p className="text-slate-600">• Inspeksi bulanan untuk monitor perkembangan</p>
+                      <p className="text-slate-600">• Rencana penyegelan dalam 6 bulan ke depan</p>
+                    </>
+                  )}
+                  {finalScore >= 25 && finalScore < 50 && (
+                    <>
+                      <p className="text-orange-700">⚠ Perbaikan segera diperlukan</p>
+                      <p className="text-slate-600">• Inspeksi detail & survey kondisi lapangan</p>
+                      <p className="text-slate-600">• Perencanaan perbaikan 1-3 bulan ke depan</p>
+                    </>
+                  )}
+                  {finalScore < 25 && (
+                    <>
+                      <p className="text-red-700">🚨 Rehab/rekonstruksi mendesak</p>
+                      <p className="text-slate-600">• Hubungi dinas terkait untuk assessment lengkap</p>
+                      <p className="text-slate-600">• Prioritaskan untuk perbaikan segera</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Auto-process Toggle */}
