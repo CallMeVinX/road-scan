@@ -1,39 +1,129 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { UploadedImageData } from '../../types'
 
-type MorphMode = 'dilation' | 'erosion'
+// ---------------------------------------------------------------------------
+// TYPES
+// ---------------------------------------------------------------------------
+
+type MorphMode = 'dilation' | 'erosion' | 'opening' | 'closing'
+
+interface MorphOption {
+  id: MorphMode
+  label: string
+  symbol: string
+  shortDesc: string
+  longDesc: string
+  colorClass: string
+  activeClass: string
+}
 
 interface StageMorphologyProps {
   uploadedImage: UploadedImageData | null
 }
 
-export function StageMorphology({ uploadedImage }: StageMorphologyProps) {
-  const [mode, setMode] = useState<MorphMode>('dilation')
-  const [kernelSize, setKernelSize] = useState<number>(3)
-  const [resultImage, setResultImage] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [autoProcess, setAutoProcess] = useState(true)
+// ---------------------------------------------------------------------------
+// KONSTANTA OPERASI
+// ---------------------------------------------------------------------------
 
-  // Auto-process ketika parameter berubah
+const MORPH_OPTIONS: MorphOption[] = [
+  {
+    id: 'dilation',
+    label: 'Dilation',
+    symbol: '⊕',
+    shortDesc: 'Dilasi',
+    longDesc: 'Memperluas area terang — menebalkan fitur dan mengisi celah kecil pada retakan.',
+    colorClass: 'text-blue-700',
+    activeClass: 'border-blue-600 bg-blue-600 text-white shadow-md',
+  },
+  {
+    id: 'erosion',
+    label: 'Erosion',
+    symbol: '⊖',
+    shortDesc: 'Erosi',
+    longDesc: 'Menyempitkan area terang — mengikis noise kecil dan memperhalus tepi struktur.',
+    colorClass: 'text-violet-700',
+    activeClass: 'border-violet-600 bg-violet-600 text-white shadow-md',
+  },
+  {
+    id: 'opening',
+    label: 'Opening',
+    symbol: '∘',
+    shortDesc: 'Erosi → Dilasi',
+    longDesc: 'Menghapus noise kecil tanpa mengubah ukuran struktur utama (Erosi dahulu, lalu Dilasi).',
+    colorClass: 'text-emerald-700',
+    activeClass: 'border-emerald-600 bg-emerald-600 text-white shadow-md',
+  },
+  {
+    id: 'closing',
+    label: 'Closing',
+    symbol: '•',
+    shortDesc: 'Dilasi → Erosi',
+    longDesc: 'Menutup celah kecil pada retakan tanpa memperbesar tepi (Dilasi dahulu, lalu Erosi).',
+    colorClass: 'text-amber-700',
+    activeClass: 'border-amber-600 bg-amber-600 text-white shadow-md',
+  },
+]
+
+// Aksen warna per mode untuk badge dan highlight
+const ACCENT: Record<MorphMode, string> = {
+  dilation: 'bg-blue-100 text-blue-700',
+  erosion:  'bg-violet-100 text-violet-700',
+  opening:  'bg-emerald-100 text-emerald-700',
+  closing:  'bg-amber-100 text-amber-700',
+}
+
+const SPINNER_COLOR: Record<MorphMode, string> = {
+  dilation: 'border-blue-600',
+  erosion:  'border-violet-600',
+  opening:  'border-emerald-600',
+  closing:  'border-amber-600',
+}
+
+// ---------------------------------------------------------------------------
+// COMPONENT
+// ---------------------------------------------------------------------------
+
+export function StageMorphology({ uploadedImage }: StageMorphologyProps) {
+  const [mode, setMode]               = useState<MorphMode>('dilation')
+  const [kernelSize, setKernelSize]   = useState<number>(3)
+  const [iterations, setIterations]   = useState<number>(1)
+  const [resultImage, setResultImage] = useState<string | null>(null)
+  const [isLoading, setIsLoading]     = useState(false)
+  const [autoProcess, setAutoProcess] = useState(true)
+  const [error, setError]             = useState<string | null>(null)
+
+  // Debounce auto-process agar tidak terlalu sering hit backend saat slider digeser
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
-    if (uploadedImage && autoProcess && !isLoading) {
+    if (!uploadedImage || !autoProcess || isLoading) return
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
       processImage(mode)
+    }, 350)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [uploadedImage, mode, kernelSize, autoProcess])
+  }, [uploadedImage, mode, kernelSize, iterations, autoProcess])
+
+  // ---------------------------------------------------------------------------
+  // PROCESS IMAGE
+  // ---------------------------------------------------------------------------
 
   const processImage = async (selectedMode: MorphMode = mode) => {
-    setMode(selectedMode)
-    
-    if (!uploadedImage || !uploadedImage.file) {
-      return
-    }
+    if (!uploadedImage?.file) return
 
+    setMode(selectedMode)
     setIsLoading(true)
+    setError(null)
+
     const formData = new FormData()
     formData.append('file', uploadedImage.file)
     formData.append('operation', selectedMode)
-    formData.append('iterations', '1')
-    formData.append('kernel_size', kernelSize.toString())
+    formData.append('iterations', String(iterations))
+    formData.append('kernel_size', String(kernelSize))
 
     try {
       const response = await fetch('http://127.0.0.1:8000/api/v1/morphology/transform', {
@@ -41,81 +131,170 @@ export function StageMorphology({ uploadedImage }: StageMorphologyProps) {
         body: formData,
       })
 
-      if (!response.ok) throw new Error("Gagal memproses gambar")
-      
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData?.detail ?? `HTTP ${response.status}`)
+      }
+
       const data = await response.json()
       setResultImage(`data:image/png;base64,${data.mask_base64}`)
-      
-    } catch (error) {
-      console.error(error)
-      alert("Gagal menghubungi backend.")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Terjadi kesalahan tidak diketahui.'
+      setError(msg)
+      console.error('[StageMorphology]', err)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const getModeDescription = (m: MorphMode): string => {
-    return m === 'dilation' 
-      ? 'Pelebaran - menambah area putih, memperluas struktur positif'
-      : 'Pengikisan - mengurangi area putih, mengecilkan struktur positif'
-  }
+  // ---------------------------------------------------------------------------
+  // DERIVED
+  // ---------------------------------------------------------------------------
+
+  const activeOption = MORPH_OPTIONS.find(o => o.id === mode)!
+
+  // ---------------------------------------------------------------------------
+  // RENDER
+  // ---------------------------------------------------------------------------
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
+    <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
+
+      {/* ── LEFT: Preview Panel ─────────────────────────────────────────── */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex justify-between items-center mb-4">
+
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Operasi Morfologi (Live)</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Pelebaran (dilation) dan pengikisan (erosion) untuk memperkuat/melemahkan struktur tepi.
+            <h2 className="text-lg font-semibold text-slate-900">Operasi Morfologi</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Terapkan Dilation, Erosion, Opening, atau Closing pada edge mask gambar.
             </p>
           </div>
-          <div className="flex gap-2 items-center">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={autoProcess}
-                onChange={(e) => setAutoProcess(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-blue-600"
+
+          {/* Auto-process toggle */}
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <span className="text-slate-600 font-medium">Auto</span>
+            <div
+              role="checkbox"
+              aria-checked={autoProcess}
+              onClick={() => setAutoProcess(v => !v)}
+              className={`relative h-5 w-9 rounded-full transition-colors ${
+                autoProcess ? 'bg-blue-500' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  autoProcess ? 'translate-x-4' : 'translate-x-0'
+                }`}
               />
-              <span className="text-slate-700">Auto</span>
-            </label>
-          </div>
+            </div>
+          </label>
         </div>
 
-        {/* Mode Active Badge */}
-        <div className="mb-4 inline-block rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-          Metode: {mode === 'dilation' ? 'Pelebaran' : 'Pengikisan'} ({kernelSize}×{kernelSize})
+        {/* Active Mode Badge */}
+        <div className={`mb-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${ACCENT[mode]}`}>
+          <span>{activeOption.symbol}</span>
+          <span>{activeOption.shortDesc}</span>
+          <span className="opacity-60">|</span>
+          <span>Kernel {kernelSize}×{kernelSize}</span>
+          <span className="opacity-60">|</span>
+          <span>Iter {iterations}</span>
         </div>
 
-        <div className="mt-5 relative h-80 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 flex items-center justify-center">
+        {/* Image Canvas */}
+        <div className="relative h-80 overflow-hidden rounded-xl border border-slate-200 bg-slate-950 flex items-center justify-center">
+
           {isLoading ? (
-            <div className="text-center">
-              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-              <p className="text-slate-500 font-semibold">Memproses {mode === 'dilation' ? 'Dilation' : 'Erosion'}...</p>
+            <div className="flex flex-col items-center gap-3">
+              <div className={`h-9 w-9 animate-spin rounded-full border-2 border-t-transparent ${SPINNER_COLOR[mode]}`} />
+              <p className="text-xs font-semibold text-slate-400 tracking-wide uppercase">
+                Memproses {activeOption.label}…
+              </p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center gap-2 px-6 text-center">
+              <span className="text-2xl">⚠️</span>
+              <p className="text-sm font-semibold text-red-400">Gagal menghubungi backend</p>
+              <p className="text-xs text-slate-500">{error}</p>
+              <button
+                onClick={() => processImage()}
+                className="mt-2 rounded-lg bg-slate-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition"
+              >
+                Coba Lagi
+              </button>
             </div>
           ) : resultImage ? (
-            <img src={resultImage} alt="Result from API" className="absolute inset-0 h-full w-full object-contain bg-black" />
+            <img
+              src={resultImage}
+              alt={`Hasil ${activeOption.label}`}
+              className="absolute inset-0 h-full w-full object-contain"
+            />
           ) : uploadedImage ? (
-            <img src={uploadedImage.url} alt="Original" className="absolute inset-0 h-full w-full object-contain opacity-50" />
+            <img
+              src={uploadedImage.url}
+              alt="Original"
+              className="absolute inset-0 h-full w-full object-contain opacity-40"
+            />
           ) : (
-            <div className="text-slate-400">Belum ada gambar</div>
+            <p className="text-sm text-slate-500">Belum ada gambar diunggah</p>
           )}
 
-          <div className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow">
-            {mode === 'dilation' ? '⊕ Dilation' : '⊖ Erosion'} | Kernel: {kernelSize}×{kernelSize}
-          </div>
+          {/* Corner label */}
+          {!isLoading && !error && (
+            <div className="absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+              {activeOption.symbol} {activeOption.label} | {kernelSize}×{kernelSize} | ×{iterations}
+            </div>
+          )}
         </div>
+
+        {/* Manual Process Button (only when auto is off) */}
+        {!autoProcess && (
+          <button
+            onClick={() => processImage()}
+            disabled={isLoading || !uploadedImage}
+            className="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50 transition"
+          >
+            {isLoading ? 'Memproses…' : '▶ Jalankan'}
+          </button>
+        )}
       </section>
 
-      <aside className="rounded-2xl border border-blue-200 bg-blue-50/40 p-5">
-        <h3 className="text-base font-semibold text-slate-900 mb-4">Pengaturan Parameter</h3>
+      {/* ── RIGHT: Controls Panel ────────────────────────────────────────── */}
+      <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-5 flex flex-col gap-5">
+
+        <h3 className="text-base font-semibold text-slate-800">Parameter</h3>
+
+        {/* Mode Buttons (2×2 grid) */}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Mode Operasi</p>
+          <div className="grid grid-cols-2 gap-2">
+            {MORPH_OPTIONS.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => processImage(opt.id)}
+                disabled={isLoading}
+                className={`rounded-xl border px-3 py-3 text-left transition ${
+                  mode === opt.id
+                    ? opt.activeClass
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100'
+                } disabled:opacity-50`}
+              >
+                <div className="text-lg leading-none mb-1">{opt.symbol}</div>
+                <div className="text-xs font-bold">{opt.label}</div>
+                <div className={`text-[10px] mt-0.5 leading-tight ${mode === opt.id ? 'text-white/80' : 'text-slate-400'}`}>
+                  {opt.shortDesc}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Kernel Size Slider */}
-        <div className="mb-6 pb-6 border-b border-blue-200">
-          <label className="text-sm font-semibold text-slate-700 flex justify-between mb-2">
-            <span>Ukuran Kernel:</span>
-            <span className="text-blue-700 font-bold">{kernelSize}×{kernelSize}</span>
+        <div className="border-t border-slate-200 pt-4">
+          <label className="flex justify-between text-sm font-semibold text-slate-700 mb-2">
+            <span>Ukuran Kernel</span>
+            <span className="font-bold text-slate-900">{kernelSize}×{kernelSize}</span>
           </label>
           <input
             type="range"
@@ -123,61 +302,44 @@ export function StageMorphology({ uploadedImage }: StageMorphologyProps) {
             max="15"
             step="2"
             value={kernelSize}
-            onChange={(e) => setKernelSize(Number(e.target.value))}
+            onChange={e => setKernelSize(Number(e.target.value))}
             disabled={isLoading}
-            className="mt-3 w-full h-2 cursor-pointer appearance-none rounded-lg bg-blue-200 accent-blue-600 disabled:opacity-50"
+            className="w-full h-2 appearance-none rounded-lg bg-slate-200 accent-slate-700 cursor-pointer disabled:opacity-50"
           />
-          <p className="mt-2 text-xs text-slate-500 leading-relaxed">
-            Nilai ganjil (1, 3, 5, 7...). Semakin besar, semakin ekstrem efeknya.
+          <p className="mt-1.5 text-[11px] text-slate-400">
+            Nilai ganjil (1–15). Semakin besar → efek semakin ekstrem.
           </p>
         </div>
 
-        {/* Mode Selection */}
-        <div className="space-y-3 mb-5">
-          <button
-            onClick={() => processImage('dilation')}
+        {/* Iterations Slider */}
+        <div className="border-t border-slate-200 pt-4">
+          <label className="flex justify-between text-sm font-semibold text-slate-700 mb-2">
+            <span>Iterasi</span>
+            <span className="font-bold text-slate-900">×{iterations}</span>
+          </label>
+          <input
+            type="range"
+            min="1"
+            max="5"
+            step="1"
+            value={iterations}
+            onChange={e => setIterations(Number(e.target.value))}
             disabled={isLoading}
-            className={`w-full rounded-xl border px-4 py-3 text-left text-base font-semibold transition ${
-              mode === 'dilation' 
-                ? 'border-blue-600 bg-blue-600 text-white shadow-md' 
-                : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200'
-            } disabled:opacity-60`}
-          >
-            <div className="flex items-center justify-between">
-              <span>⊕ Dilation</span>
-              {mode === 'dilation' && (
-                <span className="text-sm">Aktif</span>
-              )}
-            </div>
-          </button>
-
-          <button
-            onClick={() => processImage('erosion')}
-            disabled={isLoading}
-            className={`w-full rounded-xl border px-4 py-3 text-left text-base font-semibold transition ${
-              mode === 'erosion' 
-                ? 'border-blue-600 bg-blue-600 text-white shadow-md' 
-                : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200'
-            } disabled:opacity-60`}
-          >
-            <div className="flex items-center justify-between">
-              <span>⊖ Erosion</span>
-              {mode === 'erosion' && (
-                <span className="text-sm">Aktif</span>
-              )}
-            </div>
-          </button>
+            className="w-full h-2 appearance-none rounded-lg bg-slate-200 accent-slate-700 cursor-pointer disabled:opacity-50"
+          />
+          <p className="mt-1.5 text-[11px] text-slate-400">
+            Berapa kali operasi diulang berturut-turut (1–5).
+          </p>
         </div>
 
         {/* Info Box */}
-        <div className="bg-white/50 rounded-lg p-3 border border-blue-100">
-          <p className="text-xs font-semibold text-slate-700 mb-1">
-            {mode === 'dilation' ? '⊕ Pelebaran' : '⊖ Pengikisan'}
+        <div className={`rounded-xl p-3 border text-xs leading-relaxed ${ACCENT[mode].replace('text-', 'border-').replace('bg-', 'bg-').split(' ')[0]} bg-white border-slate-100`}>
+          <p className="font-bold text-slate-800 mb-1">
+            {activeOption.symbol} {activeOption.label}
           </p>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            {getModeDescription(mode)}
-          </p>
+          <p className="text-slate-600">{activeOption.longDesc}</p>
         </div>
+
       </aside>
     </div>
   )

@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 from sklearn.cluster import KMeans
 
-
 def preprocess_image(
     image: np.ndarray,
     grayscale: bool,
@@ -26,6 +25,7 @@ def preprocess_image(
         if output.ndim == 3:
             output = cv2.cvtColor(output, cv2.COLOR_BGR2GRAY)
             output = cv2.GaussianBlur(output, (3, 3), 0)
+
         # ---------------------------------------------------------------
         # PERBAIKAN: GANTI THRESHOLD GLOBAL DENGAN OTSU
         # Alasan teoritis: Threshold global (127) tidak adaptif terhadap variasi pencahayaan.
@@ -57,7 +57,7 @@ def edge_detection_3x3(image: np.ndarray) -> tuple[np.ndarray, list[list[int]], 
     # Normalize ke 0-255
     normalized = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-    # Kernel Sobel x (contoh)
+    # Kernel Sobel x (contoh representasi)
     kernel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
 
     stats = {
@@ -68,13 +68,24 @@ def edge_detection_3x3(image: np.ndarray) -> tuple[np.ndarray, list[list[int]], 
 
     return normalized, kernel_x.astype(int).tolist(), stats
 
-
 def morphology_transform(
     image: np.ndarray,
     operation: str,
     iterations: int,
     kernel_size: int = 3,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Menjalankan operasi morfologi pada citra masukan.
+
+    Args:
+        image:       Citra BGR dari upload pengguna.
+        operation:   Salah satu dari 'dilation' | 'erosion' | 'opening' | 'closing'.
+        iterations:  Jumlah iterasi operasi (1–5).
+        kernel_size: Ukuran kernel strukturing element (ganjil, 1–31).
+
+    Returns:
+        Tuple (mask_result, overlay) — keduanya np.ndarray grayscale.
+    """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
     # ---------------------------------------------------------------
@@ -86,22 +97,29 @@ def morphology_transform(
     # ---------------------------------------------------------------
     base_mask = cv2.Canny(gray, 50, 150)
 
-    k_size = max(1, kernel_size)
-    kernel = np.ones((k_size, k_size), dtype=np.uint8)
+    # Pastikan kernel_size ganjil dan dalam rentang yang aman
+    k = max(1, kernel_size)
+    if k % 2 == 0:
+        k += 1
+    k = min(k, 31)
 
-    if operation == "dilation":
+    kernel = np.ones((k, k), dtype=np.uint8)
+    op = operation.lower()
+
+    if op == "dilation":
         # Menebalkan edge untuk mengisi celah kecil pada retakan
         transformed = cv2.dilate(base_mask, kernel, iterations=iterations)
-    elif operation == "erosion":
+    elif op == "erosion":
         # Mengikis noise kecil sambil mempertahankan struktur retakan utama
         transformed = cv2.erode(base_mask, kernel, iterations=iterations)
-    elif operation == "opening":
-        # Erosion followed by dilation - menghilangkan noise kecil tanpa mengubah ukuran objek
+    elif op == "opening":
+        # Erosion followed by dilation - menghilangkan noise kecil tanpa mengubah ukuran struktur
         transformed = cv2.morphologyEx(base_mask, cv2.MORPH_OPEN, kernel, iterations=iterations)
-    elif operation == "closing":
+    elif op == "closing":
         # Dilation followed by erosion - menutup celah kecil pada retakan
         transformed = cv2.morphologyEx(base_mask, cv2.MORPH_CLOSE, kernel, iterations=iterations)
     else:
+        # Fallback
         transformed = base_mask
 
     return transformed, transformed
