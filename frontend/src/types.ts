@@ -4,6 +4,7 @@ export type StageId =
   | 'convolution'
   | 'morphology'
   | 'feature-detection'
+  | 'classification'
   | 'clustering'
   | 'quantization'
   | 'noise'

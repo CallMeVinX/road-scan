@@ -12,6 +12,7 @@ import {
   Link2,
 } from 'lucide-react'
 import { Sidebar } from './components/Sidebar'
+import { StageClassification } from './components/stages/StageClassification'
 import { StageClustering } from './components/stages/StageClustering'
 import { StageConvolution } from './components/stages/StageConvolution'
 import { StageDataInput } from './components/stages/StageDataInput'
@@ -56,7 +57,7 @@ function App() {
       {
         id: 'techniques' as const,
         title: 'Techniques',
-        description: 'Pra-pemrosesan: grayscale dan thresholding.',
+        description: 'Pra-pemrosesan Citra',
         icon: Sparkles,
       },
       {
@@ -107,6 +108,12 @@ function App() {
         description: 'Hasil deteksi kerusakan jalan dengan penilaian dan skor mutu.',
         icon: BarChart3,
       },
+      {
+        id: 'classification' as const,
+        title: 'Classification',
+        description: 'Klasifikasi jenis kerusakan jalan dengan supervised learning.',
+        icon: BarChart3,
+      },
     ],
     [],
   )
@@ -135,6 +142,7 @@ function App() {
             {activeStage === 'convolution' && <StageConvolution uploadedImage={uploadedImage} />}
             {activeStage === 'morphology' && <StageMorphology uploadedImage={uploadedImage} />}
             {activeStage === 'feature-detection' && <StageFeatureDetection uploadedImage={uploadedImage} />}
+            {activeStage === 'classification' && <StageClassification uploadedImage={uploadedImage} />}
             {activeStage === 'clustering' && <StageClustering uploadedImage={uploadedImage} />}
             {activeStage === 'quantization' && <StageQuantization uploadedImage={uploadedImage} />}
             {activeStage === 'noise' && <StageNoise uploadedImage={uploadedImage} />}
