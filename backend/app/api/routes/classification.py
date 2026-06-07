@@ -5,6 +5,7 @@ from app.services.ml_service import (
     generate_gradcam,
     get_model_metrics,
     is_model_ready,
+    load_models,
     predict_binary,
     predict_damage_type,
 )
@@ -31,6 +32,8 @@ async def classify_road_damage(file: UploadFile = File(...)) -> dict:
           "summary": str  ← kalimat ringkasan untuk ditampilkan di UI
         }
     """
+    if not is_model_ready():
+        load_models()
     if not is_model_ready():
         return {
             "model_ready": False,
@@ -126,6 +129,6 @@ async def model_status() -> dict:
         "binary_accuracy":      f"{bin_acc:.2%}"   if bin_acc   else "N/A",
         "message": (
             "Model siap digunakan." if is_model_ready()
-            else "Model belum di-load. Pastikan file .h5 ada di backend/app/ml/saved_model/"
+            else "Model belum di-load. Pastikan file .pt ada di backend/app/ml/saved_model/"
         ),
     }

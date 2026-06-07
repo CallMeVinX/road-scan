@@ -51,10 +51,11 @@ np.random.seed(SEED)
 
 # ── Path ──────────────────────────────────────────────────────────────────────
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-ML_DIR      = os.path.join(BASE_DIR, "..")
+ML_DIR = os.path.dirname(BASE_DIR)
 DATASET_DIR = os.path.join(ML_DIR, "dataset")
 OUTPUT_DIR  = os.path.join(ML_DIR, "saved_model")
 BINARY_DIR  = os.path.join(ML_DIR, "dataset_binary")
+
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -111,16 +112,16 @@ def build_model(num_classes: int) -> nn.Module:
         param.requires_grad = False
 
     # Ganti classifier head
+    # MobileNetV2 sudah melakukan global average pooling di forward(),
+    # sehingga classifier hanya memerlukan tensor [batch_size, in_features].
     in_features = model.classifier[1].in_features  # 1280
     model.classifier = nn.Sequential(
-        nn.AdaptiveAvgPool2d((1, 1)),   # akan di-handle lewat features
-        nn.Flatten(),
         nn.Linear(in_features, 256),
-        nn.BatchNorm1d(256),
+        nn.LayerNorm(256),
         nn.ReLU(inplace=True),
         nn.Dropout(0.5),
         nn.Linear(256, 128),
-        nn.BatchNorm1d(128),
+        nn.LayerNorm(128),
         nn.ReLU(inplace=True),
         nn.Dropout(0.3),
         nn.Linear(128, num_classes),

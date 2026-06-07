@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.api.router import api_router
+from app.services.ml_service import load_models
 
 app = FastAPI(
     title="Road Scan API",
@@ -36,6 +37,10 @@ async def serve_placeholder_image(filename: str):
     return FileResponse(file_path)
 
 app.include_router(api_router, prefix="/api/v1")
+
+@app.on_event("startup")
+async def startup_event():
+    load_models()
 
 # Mount static files directory
 static_dir = os.path.join(os.path.dirname(__file__), "static")

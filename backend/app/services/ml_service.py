@@ -48,14 +48,12 @@ def _build_mobilenetv2(num_classes: int) -> nn.Module:
     model = models.mobilenet_v2(weights=None)
     in_features = model.classifier[1].in_features
     model.classifier = nn.Sequential(
-        nn.AdaptiveAvgPool2d((1, 1)),
-        nn.Flatten(),
         nn.Linear(in_features, 256),
-        nn.BatchNorm1d(256),
+        nn.LayerNorm(256),
         nn.ReLU(inplace=True),
         nn.Dropout(0.5),
         nn.Linear(256, 128),
-        nn.BatchNorm1d(128),
+        nn.LayerNorm(128),
         nn.ReLU(inplace=True),
         nn.Dropout(0.3),
         nn.Linear(128, num_classes),

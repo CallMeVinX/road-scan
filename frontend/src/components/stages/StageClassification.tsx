@@ -140,6 +140,7 @@ export function StageClassification({ uploadedImage }: StageClassificationProps)
               python app/ml/training/train.py
             </code>
             <p className="mt-2 text-xs">Pastikan dataset sudah ada di <code className="bg-amber-100 px-1 rounded">backend/app/ml/dataset/</code></p>
+            <p className="mt-2 text-xs">Model akan disimpan sebagai <code className="bg-amber-100 px-1 rounded">backend/app/ml/saved_model/multiclass_classifier.pt</code> dan <code className="bg-amber-100 px-1 rounded">backend/app/ml/saved_model/binary_classifier.pt</code></p>
           </div>
         )}
 
