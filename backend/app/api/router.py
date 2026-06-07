@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import analysis, clustering, convolution, data, features, morphology, techniques, quantization, noise, feature_matching
+from app.api.routes import analysis, clustering, convolution, data, features, morphology, techniques, quantization, noise, feature_matching, classification
 
 api_router = APIRouter()
 api_router.include_router(data.router, prefix="/data", tags=["Data"])
@@ -13,3 +13,4 @@ api_router.include_router(analysis.router, prefix="/analysis", tags=["Analysis"]
 api_router.include_router(quantization.router, prefix="/quantization", tags=["Quantization"])
 api_router.include_router(noise.router, prefix="/noise", tags=["Noise"])
 api_router.include_router(feature_matching.router, prefix="/feature-matching", tags=["Feature Matching"])
+api_router.include_router(classification.router, prefix="/classification", tags=["Classification"])
